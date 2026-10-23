@@ -157,23 +157,158 @@ the available width as shown in XML. It supports padding and a shared gap, not
 margins, weights, arbitrary nested structures, or adding children after
 construction. It is not a general replacement for `LinearLayout`.
 
-## 3. Understand the two layout questions
+## 3. Understand onMeasure, onLayout, and onDraw
 
-Android separates **size** from **position**:
+Think of building a room: first choose the furniture sizes, then arrange the
+furniture, then paint what the user sees. Android separates these jobs too:
 
-```text
-onMeasure()
-    Ask each child how large it needs to be under the supplied limits.
-    Report how large this parent will be.
+| Method | Question it answers | What our custom parent does |
+| --- | --- | --- |
+| `onMeasure()` | How big should each box be? | Measures children and reports its own measured size |
+| `onLayout()` | Where should each box go? | Assigns each child a rectangle |
+| `onDraw()` | What pixels should this View paint itself? | Nothing extra; the children already draw their text and image |
 
-onLayout()
-    Give each child its final rectangle inside this parent.
+![Flow from measurement through placement to drawing, distinguishing parent drawing from child drawing.](docs/images/viewgroup-phases.svg)
+
+### onMeasure: decide sizes
+
+Android calls `measure()` on a View, which invokes its `onMeasure()` when
+measurement is needed. Inside a custom parent, we call `measure()` on each
+child with appropriate constraints:
+
+```kotlin
+child.measure(childWidthSpec, childHeightSpec)
+val childWidth = child.measuredWidth
+val childHeight = child.measuredHeight
 ```
 
-Measuring a child does not position it. Positioning it does not measure its text.
+This snippet assumes the two specs were calculated first, as shown in step 4.
+Call `measure()`, not the child's `onMeasure()` directly: the public method
+handles the framework's measurement bookkeeping.
 
-The parent passes a `MeasureSpec` for each axis. A spec contains a size and a
-mode:
+The parent must also report **its own** measured dimensions with
+`setMeasuredDimension()`. Our implementation uses `resolveSizeAndState()` to
+respect the incoming constraints.
+
+Measurement does not assign coordinates. After measuring an image at 100 by
+100 pixels, we know its box size, but not whether it belongs left, right, or
+below the text.
+
+### onLayout: assign positions
+
+Android's `layout()` call assigns a View its bounds and invokes `onLayout()`
+when layout is needed. Our `ViewGroup` uses that callback to place its children:
+
+```kotlin
+val childLeft = paddingLeft
+val childTop = paddingTop
+child.layout(
+    childLeft,
+    childTop,
+    childLeft + child.measuredWidth,
+    childTop + child.measuredHeight
+)
+```
+
+The four arguments are `left`, `top`, `right`, and `bottom` in the **parent's
+local coordinates**. They are not `x`, `y`, `width`, and `height`.
+
+For example, `child.layout(24, 40, 124, 140)` places a 100 by 100 pixel box
+24 pixels from the parent's left edge and 40 pixels from its top edge.
+
+Use `measuredWidth` and `measuredHeight` when deciding placement.
+After `layout()`, `width` and `height` describe the assigned bounds:
+`width = right - left` and `height = bottom - top`.
+
+`onLayout()` should arrange the measured children, not guess text heights or
+do custom painting. Call each child's `layout()`, not its `onLayout()` directly.
+
+### onDraw: paint this View's own content
+
+`onDraw(canvas)` is for custom pixels owned by **this View**, such as a chart,
+a connector line, or a decoration behind the children. It does not measure or
+place children.
+
+We do **not** override it in either example:
+
+- The `TextView`s draw their own text.
+- The `ImageView` draws its drawable.
+- Android's drawing pipeline draws those children through `dispatchDraw()`.
+
+In particular, **a ViewGroup's `onDraw()` does not draw its children**. A custom
+layout does not need to call `child.draw()` or redraw text on a `Canvas`.
+
+Here is an optional illustration of a decoration you could add inside a
+custom `ViewGroup`. This is not part of the runnable examples:
+
+```kotlin
+private val linePaint = android.graphics.Paint(
+    android.graphics.Paint.ANTI_ALIAS_FLAG
+).apply {
+    color = android.graphics.Color.BLUE
+    strokeWidth = resources.displayMetrics.density * 2f
+}
+
+init {
+    setWillNotDraw(false)
+}
+
+override fun onDraw(canvas: android.graphics.Canvas) {
+    super.onDraw(canvas)
+    val y = paddingTop.toFloat()
+    canvas.drawLine(
+        paddingLeft.toFloat(),
+        y,
+        (width - paddingRight).toFloat(),
+        y,
+        linePaint
+    )
+}
+```
+
+A plain `ViewGroup` normally marks its own drawing as unnecessary.
+`setWillNotDraw(false)` enables the custom `onDraw()` path. It is not needed
+just to display child Views, and it is not needed in our examples.
+
+Allocate the `Paint` once, not during every draw. This line is painted before
+the children, so an overlapping child can cover it. A regular background can
+usually be set with an XML background drawable instead of overriding `onDraw()`.
+
+The simplified normal drawing order is:
+
+```text
+background
+    -> onDraw() for the View's own content, if enabled
+        -> dispatchDraw() for children
+            -> foreground and other decorations
+```
+
+### What triggers another pass?
+
+| Change | Request | Why |
+| --- | --- | --- |
+| Your own spacing rule changes | `requestLayout()` | Sizes or positions may need recalculation |
+| Only a custom paint color changes | `invalidate()` | Redraw pixels without changing geometry |
+| Text changes through `TextView.setText()` | Let `TextView` manage it | The child requests layout or redraw when needed |
+
+These requests schedule work; they do not mean "call all three callbacks now."
+Drawing can happen without a new measurement or layout. Measurement can run
+more than once during layout work. Do not rely on one callback sequence per
+frame or call these callbacks manually.
+
+### How parent constraints reach onMeasure
+
+For our examples, the useful mental model is:
+
+```text
+Parent offers constraints
+    -> onMeasure: measure children and report desired size under those constraints
+        -> onLayout: place the measured children
+            -> drawing: native children paint their content
+```
+
+The parent passes a `MeasureSpec` for each axis. A spec contains a size and
+a mode:
 
 | Example | Meaning |
 | --- | --- |

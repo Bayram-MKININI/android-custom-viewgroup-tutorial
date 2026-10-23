@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="530" viewBox="0 0 1000 530" role="img" aria-labelledby="title desc">
+  <title id="title">Measure sizes, lay out rectangles, then draw pixels</title>
+  <desc id="desc">Measurement gives an image its 100 by 100 pixel size. Layout places its rectangle at left 24 and top 40. Drawing paints the content. In these examples native child Views draw themselves, so the custom ViewGroup does not override onDraw.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="530" rx="16" fill="#ffffff"/>
+  <g font-family="sans-serif" fill="#0f172a">
+    <text x="35" y="42" font-size="24" font-weight="bold">Three different jobs, not three names for layout</text>
+    <rect x="30" y="75" width="280" height="285" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <text x="50" y="110" font-size="22" font-weight="bold">1. onMeasure()</text>
+    <text x="50" y="141" font-size="18">Decide the box size.</text>
+    <rect x="115" y="175" width="100" height="100" fill="#dbeafe" stroke="#2563eb" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="165" y="232" text-anchor="middle" font-size="17">100 x 100</text>
+    <text x="50" y="315" font-size="17">Size known.</text>
+    <text x="50" y="340" font-size="17">Position not assigned yet.</text>
+    <path d="M315 215H350" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="360" y="75" width="280" height="285" rx="10" fill="#f0fdf4" stroke="#15803d" stroke-width="2"/>
+    <text x="380" y="110" font-size="22" font-weight="bold">2. onLayout()</text>
+    <text x="380" y="141" font-size="18">Assign a rectangle.</text>
+    <rect x="395" y="165" width="210" height="125" fill="#ffffff" stroke="#64748b"/>
+    <rect x="419" y="205" width="100" height="75" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+    <text x="528" y="224" font-size="14">left: 24</text>
+    <text x="528" y="246" font-size="14">top: 40</text>
+    <text x="380" y="315" font-size="17">Coordinates inside the parent.</text>
+    <text x="380" y="340" font-size="17">Schematic, not to scale.</text>
+    <path d="M645 215H680" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="690" y="75" width="280" height="285" rx="10" fill="#fff7ed" stroke="#c2410c" stroke-width="2"/>
+    <text x="710" y="110" font-size="22" font-weight="bold">3. Drawing</text>
+    <text x="710" y="141" font-size="18">Paint the content.</text>
+    <rect x="775" y="175" width="100" height="100" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <path d="M783 267L815 198L840 241L854 221L867 267Z" fill="#2563eb"/>
+    <text x="710" y="315" font-size="17">ImageView draws its image.</text>
+    <text x="710" y="340" font-size="17">TextView draws its text.</text>
+    <rect x="30" y="390" width="940" height="105" rx="10" fill="#f1f5f9"/>
+    <text x="50" y="423" font-size="19" font-weight="bold">Why no onDraw() override here?</text>
+    <text x="50" y="453" font-size="18">The parent has no extra pixels to paint. Android draws children via dispatchDraw().</text>
+    <text x="50" y="480" font-size="17">onDraw() is only for this View's own custom drawing, not child placement.</text>
+  </g>
+</svg>
