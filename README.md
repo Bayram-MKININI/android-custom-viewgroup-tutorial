@@ -114,6 +114,13 @@ But the new request is more precise:
 > Let the badge extend outside the image.
 > Keep the image rounded, but do not clip the badge.
 
+Think of the red count badge on an app icon, such as Gmail.
+For `9`, use a circle.
+Its center is `(image.right, image.top)`.
+Half the circle is above the image's top edge.
+Half is to the right of its right edge.
+The badge is not placed fully inside the image.
+
 Here, "corner" means the upper-right corner of the image's rectangular bounds.
 It does not mean a point along the rounded outline.
 
