@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500" role="img" aria-labelledby="title desc">
+  <title id="title">How the headline parent arranges its children</title>
+  <desc id="desc">The parent surrounds a title and summary with padding. A separate gap lies between the two text boxes. Measurement determines box sizes; layout assigns their positions.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="800" height="500" rx="16" fill="#ffffff"/>
+  <g font-family="sans-serif" fill="#0f172a">
+    <text x="40" y="40" font-size="23" font-weight="bold">One parent. Two measured text boxes.</text>
+    <rect x="170" y="78" width="450" height="342" rx="10" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+    <text x="190" y="105" font-size="16" font-weight="bold">HeadlineView</text>
+    <rect x="214" y="134" width="362" height="96" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="234" y="167" font-size="19" font-weight="bold">Title</text>
+    <text x="234" y="198" font-size="16">Its height follows its wrapped text.</text>
+    <rect x="214" y="270" width="362" height="94" rx="6" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+    <text x="234" y="303" font-size="19" font-weight="bold">Summary</text>
+    <text x="234" y="334" font-size="16">Placed below the title and gap.</text>
+    <g stroke="#475569" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)">
+      <path d="M650 82V130"/>
+      <path d="M650 368V416"/>
+      <path d="M174 250H210"/>
+      <path d="M580 250H616"/>
+      <path d="M395 235V265"/>
+    </g>
+    <text x="667" y="105" font-size="16">Top</text>
+    <text x="667" y="124" font-size="16">padding</text>
+    <text x="667" y="391" font-size="16">Bottom</text>
+    <text x="667" y="410" font-size="16">padding</text>
+    <text x="64" y="246" font-size="16">Left</text>
+    <text x="64" y="267" font-size="16">padding</text>
+    <text x="647" y="246" font-size="16">Right</text>
+    <text x="647" y="267" font-size="16">padding</text>
+    <text x="420" y="256" font-size="16" font-weight="bold">Gap</text>
+    <text x="40" y="464" font-size="17">onMeasure = sizes.    onLayout = rectangles inside the parent.</text>
+  </g>
+</svg>

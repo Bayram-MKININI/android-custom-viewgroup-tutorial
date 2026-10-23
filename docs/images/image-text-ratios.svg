@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="530" viewBox="0 0 1000 530" role="img" aria-labelledby="title desc">
+  <title id="title">Image and gap sized from measured text width</title>
+  <desc id="desc">A text box 200 pixels wide sits to the right of a square image 100 pixels wide, separated by a 60 pixel gap. The image is 50 percent of text width, the gap is 30 percent, and the total row is 360 pixels wide, excluding padding. Both boxes are centered vertically.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="530" rx="16" fill="#ffffff"/>
+  <g font-family="sans-serif" fill="#0f172a">
+    <text x="40" y="43" font-size="24" font-weight="bold">Your example: image left, text right</text>
+    <text x="40" y="75" font-size="18">All percentages use T = the measured TextView width.</text>
+    <g stroke="#475569" stroke-width="1.5">
+      <path d="M120 116H840" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+      <path d="M120 130V390M320 155V390M440 155V390M840 130V390" stroke-dasharray="5 5"/>
+    </g>
+    <text x="480" y="105" text-anchor="middle" font-size="17">360px row width (padding excluded)</text>
+    <rect x="120" y="170" width="200" height="200" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <path d="M135 351L194 235L242 315L274 272L305 351Z" fill="#2563eb"/>
+    <text x="220" y="206" text-anchor="middle" font-size="19" font-weight="bold">Square image</text>
+    <rect x="320" y="170" width="120" height="200" fill="#fff7ed"/>
+    <text x="380" y="257" text-anchor="middle" font-size="18" fill="#9a3412">Empty</text>
+    <text x="380" y="284" text-anchor="middle" font-size="18" fill="#9a3412">gap</text>
+    <rect x="440" y="190" width="400" height="160" rx="8" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+    <text x="460" y="230" font-size="20" font-weight="bold">Measured text box</text>
+    <text x="460" y="265" font-size="18">Text wraps within its width.</text>
+    <text x="460" y="300" font-size="18">The image follows this box.</text>
+    <path d="M95 270H870" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="885" y="265" font-size="15">Same</text>
+    <text x="885" y="285" font-size="15">center Y</text>
+    <g stroke="#475569" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)">
+      <path d="M124 392H316"/>
+      <path d="M324 392H436"/>
+      <path d="M444 392H836"/>
+    </g>
+    <text x="220" y="425" text-anchor="middle" font-size="18" font-weight="bold">0.5T = 100px</text>
+    <text x="380" y="451" text-anchor="middle" font-size="18" fill="#9a3412">0.3T = 60px</text>
+    <text x="640" y="425" text-anchor="middle" font-size="18" font-weight="bold">T = 200px</text>
+    <text x="40" y="499" font-size="20">Total = 0.5T + 0.3T + T = 1.8T.    Text budget = available width / 1.8.</text>
+  </g>
+</svg>
