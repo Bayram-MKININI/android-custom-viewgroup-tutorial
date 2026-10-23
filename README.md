@@ -1,12 +1,13 @@
-# Build a real message row with a custom ViewGroup
+# Build a message row, then add a corner badge
 
 A message has a priority icon, a subject, a time, and a body.
 The subject must leave room for the time.
 The body can use more width.
 Its position depends on the height of both header texts.
 
-This is a real layout from [Yumi](https://github.com/Bayram-MKININI/Yumi).
-We will use its rules to learn custom measurement and placement.
+These message-row rules come from [Yumi](https://github.com/Bayram-MKININI/Yumi).
+Then we add a new request: a count badge centered on the icon's corner.
+We will build both in one custom ViewGroup.
 You need basic Kotlin and Android XML knowledge.
 
 ## Start here
@@ -48,10 +49,12 @@ It gives the body more width than the subject.
 Then it puts the body below the taller header text.
 The body preview has a five-line limit.
 
-Our sample keeps those rules.
+Our sample keeps those message rules and adds the badge.
 It uses new teaching code, simpler styling, and different spacing.
 It also adds RTL support and explicit size limits.
 It does not copy the app's implementation or reproduce its exact appearance.
+
+First, look at the row without the new badge:
 
 ![Message row with priority icon, subject, timestamp, and body. The body starts below both header texts and extends below the timestamp.](docs/images/message-row.svg)
 
@@ -128,7 +131,7 @@ You try a fixed offset.
 It works with `9`.
 Then the count becomes `99+`.
 The badge gets wider.
-You need a new offset to keep its center on the same corner.
+The offset must now depend on the badge's measured width.
 
 You also round the image.
 If the badge is inside the same rounded, clipped container, it can be cut off.
@@ -148,8 +151,7 @@ You need a clear rule for the size of the group.
 
 This is a **new design extension to the real message row**.
 This exact center-on-corner rule is not taken from Yumi's source.
-The runnable sample below keeps the real row's four children.
-We return to this badge extension after building that row.
+The runnable sample below includes all five children, including the badge.
 
 ### Do we need a custom ViewGroup?
 
@@ -158,10 +160,17 @@ Not strictly.
 It can constrain the subject before the time and use a bottom barrier for the body.
 It can also help position an overlapping badge.
 
-The point is not to make standard layouts look impossible.
-The point is to see where the rules live as the design grows.
-You can use constraints, wrappers, or custom measurement code.
-Here, we choose one parent that calculates sizes and positions directly.
+So why choose a custom parent?
+We want one place to read the whole rule:
+**measure the icon and badge, reserve their full space, then measure the texts.**
+The XML holds the content and style.
+The Kotlin parent holds the size and position rules.
+
+The tradeoff is real.
+We must handle measurement, RTL, and unsupported sizes ourselves.
+ConstraintLayout already handles much of that work.
+Use it if its constraints are easier for your team to maintain.
+Here, we choose direct code to learn how those layout decisions work.
 
 ## 3. Give each method one job
 
@@ -169,7 +178,7 @@ A `ViewGroup` is a View that contains other Views.
 It is the **parent**.
 The Views inside it are its **children**.
 
-Our parent has four direct children:
+Our parent has five direct children:
 
 ```text
 MessageRowView
@@ -177,7 +186,11 @@ MessageRowView
     -> Subject TextView
     -> Time TextView
     -> Body TextView
+    -> Badge TextView
 ```
+
+The badge is last so Android draws it above the icon.
+The icon and badge are siblings, not a rounded parent and its child.
 
 Android separates three jobs:
 
@@ -194,13 +207,12 @@ Our parent has no extra content to paint in `onDraw()`.
 
 ![The three jobs: measure sizes, assign rectangles, and draw content.](docs/images/viewgroup-phases.svg)
 
-## 4. Measure the time before the subject
+## 4. Measure the icon and badge before the texts
 
-First, find the width available after padding and the icon:
+First, find the width inside the row's padding:
 
 ```kotlin
 val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-val textAreaWidth = contentWidth - iconSize - iconGap
 ```
 
 All measurement code uses pixels.
@@ -216,12 +228,80 @@ Android describes each size with a `MeasureSpec`:
 | `UNSPECIFIED` | No limit for this width or height |
 
 The icon gets an exact size.
-The timestamp gets up to the full text area:
+The badge gets enough room to measure its text:
 
 ```kotlin
 val unlimitedHeight = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
 val iconSpec = MeasureSpec.makeMeasureSpec(iconSize, MeasureSpec.EXACTLY)
 icon.measure(iconSpec, iconSpec)
+badge.measure(
+    MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.AT_MOST),
+    unlimitedHeight
+)
+```
+
+### Reserve the full icon-and-badge rectangle
+
+For a moment, put the icon at `(0, 0)`.
+Its upper-right corner is `(icon.measuredWidth, 0)`.
+Center the badge there:
+
+```kotlin
+val badgeLeft = icon.measuredWidth - badge.measuredWidth / 2
+val badgeTop = -badge.measuredHeight / 2
+```
+
+The negative top is expected.
+The badge extends above the icon.
+But the row must contain both children.
+Find the smallest rectangle around them:
+
+```kotlin
+iconGroup.set(0, 0, icon.measuredWidth, icon.measuredHeight)
+iconGroup.union(
+    badgeLeft, badgeTop,
+    badgeLeft + badge.measuredWidth, badgeTop + badge.measuredHeight
+)
+```
+
+`iconGroup` is an Android `Rect`.
+It stores four edges. It is **not another View or wrapper**.
+`union()` expands it to include the badge.
+
+Here is a complete example in pixels:
+
+```text
+Icon: 48 x 48. Badge: 24 x 24.
+
+Before the shift:    left   top   right   bottom
+Icon                   0     0      48       48
+Badge                 36   -12      60       12
+Group                  0   -12      60       48
+
+Group size: 60 x 60.
+Row padding: 16 on each side.
+Move both children by (+16, +28).
+
+After the shift:     left   top   right   bottom
+Icon                  16    28      64       76
+Badge                 52    16      76       40
+Group                 16    16      76       76
+
+Badge center: (64, 28).
+Icon top-right corner: (64, 28). They match.
+```
+
+Why `+28` vertically?
+The group's old top is `-12`.
+To move it to the padding at `16`, add `16 - (-12) = 28`.
+No child now extends outside the row.
+
+### Measure the time before the subject
+
+Remove the whole group's width, not just the icon's width:
+
+```kotlin
+val textAreaWidth = contentWidth - iconGroup.width() - iconGap
 time.measure(
     MeasureSpec.makeMeasureSpec(textAreaWidth, MeasureSpec.AT_MOST),
     unlimitedHeight
@@ -270,7 +350,7 @@ Now calculate the height:
 ```kotlin
 val headerHeight = maxOf(subject.measuredHeight, time.measuredHeight)
 val contentHeight = maxOf(
-    icon.measuredHeight,
+    iconGroup.height(),
     headerHeight + bodyGap + body.measuredHeight
 )
 ```
@@ -279,7 +359,7 @@ Why use `maxOf()`?
 The subject may wrap onto several lines.
 The time could also be taller, for example with a different text size.
 The body must start below whichever is taller.
-The row must also contain the icon.
+The row must also contain the whole icon-and-badge group.
 
 Add top and bottom padding to get the parent's desired height.
 Use `resolveSizeAndState()` and `setMeasuredDimension()` to report it.
@@ -291,11 +371,28 @@ Measurement gives sizes, not positions.
 For left-to-right reading, place the children like this:
 
 ```text
-Icon:    at the start padding
-Subject: after the icon and icon gap
+Group:   at the start and top padding
+Icon:    shifted inside the group
+Badge:   centered on the icon's top-right corner
+Subject: after the group and icon gap
 Time:    against the end padding
 Body:    aligned with the subject, below both header texts
 ```
+
+The group rectangle tells us how far to shift the icon:
+
+```kotlin
+val iconLeft = groupLeft - iconGroup.left
+val iconTop = paddingTop - iconGroup.top
+val badgeLeft = iconLeft + icon.measuredWidth - badge.measuredWidth / 2
+val badgeTop = iconTop - badge.measuredHeight / 2
+```
+
+In LTR, `groupLeft` is `paddingLeft`.
+In RTL, the group moves to the right of the row.
+The badge still uses the icon's **physical top-right corner**.
+This is a design choice, not a reading-direction rule.
+Integer division may move the center by half a pixel for odd badge sizes.
 
 The key body rule is:
 
@@ -325,7 +422,7 @@ The full class mirrors placement for right-to-left layouts.
 
 The row sits inside a `ScrollView`.
 It requires an exact width and no height limit.
-All four children must stay visible.
+All five children must stay visible.
 Child margins are not supported.
 The parent owns the spacing.
 
@@ -350,7 +447,10 @@ Save this as `app/src/main/res/layout/message_row_example.xml`:
             android:id="@+id/message_icon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:background="@drawable/message_icon_background"
+            android:clipToOutline="true"
             android:contentDescription="@string/message_priority"
+            android:padding="8dp"
             android:src="@drawable/message_priority" />
 
         <TextView
@@ -378,12 +478,39 @@ Save this as `app/src/main/res/layout/message_row_example.xml`:
             android:text="@string/message_body"
             android:textColor="?android:attr/textColorPrimary"
             android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/message_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/message_badge_background"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:minWidth="24dp"
+            android:minHeight="24dp"
+            android:paddingLeft="6dp"
+            android:paddingTop="2dp"
+            android:paddingRight="6dp"
+            android:paddingBottom="2dp"
+            android:singleLine="true"
+            android:text="@string/message_badge"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
     </dev.bayram.viewgrouptutorial.MessageRowView>
 </ScrollView>
 ```
 
 The project includes the [strings and dimensions](app/src/main/res/values/strings.xml)
 and [priority icon](app/src/main/res/drawable/message_priority.xml).
+The icon is now `48dp` so the badge is easy to see.
+The [icon background](app/src/main/res/drawable/message_icon_background.xml)
+has rounded corners. `clipToOutline` clips only the icon.
+The [badge background](app/src/main/res/drawable/message_badge_background.xml)
+has fully rounded ends.
+With `9` and the default font size, the badge is a circle.
+With `99+`, it becomes a wider pill.
+Both shapes keep the same center rule.
 The icon has a translated description because it communicates priority.
 The body is a five-line preview, as in Yumi.
 This sample does not implement opening the full message.
@@ -393,20 +520,27 @@ Here, XML `wrap_content` does not choose the icon size or available text widths.
 
 ### Kotlin
 
-This is the complete `MessageRowView.kt`:
+The layout idea is now complete.
+The full class also finds the XML children, checks its size limits,
+and reports child measurement warnings to Android.
+Those are supporting details, not new placement rules.
+
+<details>
+<summary>Complete MessageRowView.kt — expand to read or copy</summary>
 
 ```kotlin
 package dev.bayram.viewgrouptutorial
 
 import android.content.Context
+import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 
 /**
- * Reserves timestamp space before measuring the subject, as in Yumi's message row.
- * Requires exact width, unbounded height, and four visible XML children without margins.
+ * Adds a corner badge to Yumi's message-row rules, reserving its full bounds.
+ * Requires exact width, unbounded height, and five visible XML children without margins.
  */
 class MessageRowView @JvmOverloads constructor(
     context: Context,
@@ -418,6 +552,8 @@ class MessageRowView @JvmOverloads constructor(
     private lateinit var subject: TextView
     private lateinit var time: TextView
     private lateinit var body: TextView
+    private lateinit var badge: TextView
+    private val iconGroup = Rect()
     private val iconSize = resources.getDimensionPixelSize(R.dimen.message_icon_size)
     private val iconGap = resources.getDimensionPixelSize(R.dimen.message_icon_gap)
     private val headerGap = resources.getDimensionPixelSize(R.dimen.message_header_gap)
@@ -425,13 +561,14 @@ class MessageRowView @JvmOverloads constructor(
 
     override fun onFinishInflate() {
         super.onFinishInflate()
-        require(childCount == 4) { "MessageRowView requires exactly four children" }
+        require(childCount == 5) { "MessageRowView requires exactly five children" }
         icon = requireNotNull(findViewById<ImageView>(R.id.message_icon))
         subject = requireNotNull(findViewById<TextView>(R.id.message_subject))
         time = requireNotNull(findViewById<TextView>(R.id.message_time))
         body = requireNotNull(findViewById<TextView>(R.id.message_body))
-        require(listOf(icon, subject, time, body).all { it.parent === this }) {
-            "All four views must be direct children"
+        badge = requireNotNull(findViewById<TextView>(R.id.message_badge))
+        require(listOf(icon, subject, time, body, badge).all { it.parent === this }) {
+            "All five views must be direct children"
         }
     }
 
@@ -442,16 +579,29 @@ class MessageRowView @JvmOverloads constructor(
         require(MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
             "MessageRowView requires unbounded height; use the sample ScrollView"
         }
-        require(listOf(icon, subject, time, body).all { it.visibility == VISIBLE }) {
-            "This example requires all four children to be visible"
+        require(listOf(icon, subject, time, body, badge).all { it.visibility == VISIBLE }) {
+            "This example requires all five children to be visible"
         }
         val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-        val textAreaWidth = contentWidth - iconSize - iconGap
-        require(textAreaWidth > headerGap) { "Not enough width for the message row" }
+        require(contentWidth > 0) { "Not enough width for the message row" }
 
         val unlimitedHeight = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         val iconSpec = MeasureSpec.makeMeasureSpec(iconSize, MeasureSpec.EXACTLY)
         icon.measure(iconSpec, iconSpec)
+        badge.measure(
+            MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.AT_MOST),
+            unlimitedHeight
+        )
+        val badgeLeft = icon.measuredWidth - badge.measuredWidth / 2
+        val badgeTop = -badge.measuredHeight / 2
+        iconGroup.set(0, 0, icon.measuredWidth, icon.measuredHeight)
+        iconGroup.union(
+            badgeLeft, badgeTop,
+            badgeLeft + badge.measuredWidth, badgeTop + badge.measuredHeight
+        )
+        val textAreaWidth = contentWidth - iconGroup.width() - iconGap
+        require(textAreaWidth > headerGap) { "Not enough width for the message row" }
+
         time.measure(
             MeasureSpec.makeMeasureSpec(textAreaWidth, MeasureSpec.AT_MOST),
             unlimitedHeight
@@ -470,10 +620,10 @@ class MessageRowView @JvmOverloads constructor(
 
         val headerHeight = maxOf(subject.measuredHeight, time.measuredHeight)
         val contentHeight = maxOf(
-            icon.measuredHeight,
+            iconGroup.height(),
             headerHeight + bodyGap + body.measuredHeight
         )
-        val childState = listOf(icon, subject, time, body).fold(0) { state, child ->
+        val childState = listOf(icon, subject, time, body, badge).fold(0) { state, child ->
             combineMeasuredStates(state, child.measuredState)
         }
         setMeasuredDimension(
@@ -489,14 +639,22 @@ class MessageRowView @JvmOverloads constructor(
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
         val contentRight = right - left - paddingRight
-        val textStart = if (rtl) contentRight - icon.measuredWidth - iconGap
-            else paddingLeft + icon.measuredWidth + iconGap
-        val iconLeft = if (rtl) contentRight - icon.measuredWidth else paddingLeft
+        val groupLeft = if (rtl) contentRight - iconGroup.width() else paddingLeft
+        val textStart = if (rtl) groupLeft - iconGap
+            else groupLeft + iconGroup.width() + iconGap
+        val iconLeft = groupLeft - iconGroup.left
+        val iconTop = paddingTop - iconGroup.top
+        val badgeLeft = iconLeft + icon.measuredWidth - badge.measuredWidth / 2
+        val badgeTop = iconTop - badge.measuredHeight / 2
         val subjectLeft = if (rtl) textStart - subject.measuredWidth else textStart
         val timeLeft = if (rtl) paddingLeft else contentRight - time.measuredWidth
         val bodyLeft = if (rtl) textStart - body.measuredWidth else textStart
 
-        icon.layout(iconLeft, paddingTop, iconLeft + icon.measuredWidth, paddingTop + icon.measuredHeight)
+        icon.layout(iconLeft, iconTop, iconLeft + icon.measuredWidth, iconTop + icon.measuredHeight)
+        badge.layout(
+            badgeLeft, badgeTop,
+            badgeLeft + badge.measuredWidth, badgeTop + badge.measuredHeight
+        )
         subject.layout(
             subjectLeft, paddingTop,
             subjectLeft + subject.measuredWidth, paddingTop + subject.measuredHeight
@@ -515,7 +673,9 @@ class MessageRowView @JvmOverloads constructor(
 Height warning bits need `MEASURED_HEIGHT_STATE_SHIFT`.
 
 These are Android details around a short idea:
-**reserve time space, measure the subject, place the body below both**.
+**reserve the group, reserve time space, then measure and place the texts**.
+
+</details>
 
 ## 8. Try changing the content
 
@@ -529,7 +689,11 @@ The body should keep its width limit.
 
 Try a larger time text size too.
 The body must stay below both header texts.
+Then change `message_badge` from `9` to `99+`.
+The badge must stay centered on the icon's corner.
+The text area gets slightly narrower to leave room for the wider group.
 Also check large fonts, narrow windows, RTL, and screen-reader order.
+The badge reads its count as text; a production app should explain what it counts.
 
 Run the tests and Android lint:
 
@@ -538,66 +702,30 @@ Run the tests and Android lint:
 ```
 
 The [tests](app/src/test/java/dev/bayram/viewgrouptutorial/MessageRowViewTest.kt)
-check spacing, bounds, RTL, a wider timestamp, and either header text being taller.
+check spacing, bounds, RTL, a wider timestamp, either header text being taller,
+and growing badges, including a badge wider or taller than the icon.
 
-## 9. Return to the badge request
+## 9. Check the finished badge
 
-You now know where the extra rule belongs.
-The badge would be a fifth child.
-This section explains the extension; it is **not included in the runnable sample**.
+The badge is now part of the default screen, not an exercise left unfinished.
+Run the app and compare it with the corner diagram above.
 
-First, choose the behavior:
+Here is the running sample, cropped to the message row:
+
+![Running Android sample: a circular red 9 badge is centered on the rounded icon's top-right corner, with space reserved before the subject and body.](docs/images/message-row-running.png)
+
+The complete rule is:
 
 > Center the badge on the image's upper-right corner.
 > Keep the whole badge inside the row.
 > Start the text after the whole icon-and-badge group.
 
-This rule uses physical right.
-If the design should follow reading direction, mirror it in RTL.
-
-Measure the badge before calculating the group's width.
-For LTR, the core placement rule is:
-
-```text
-badge.left = image.right - badge.width / 2
-badge.top  = image.top   - badge.height / 2
-```
-
-The badge's center stays on the image's corner.
-When the count changes, both badge edges move around that center.
-Use the measured badge size, not a fixed offset.
-Whole-pixel rounding may shift the center by less than one pixel.
-
-But placement is only half the work.
-You must reserve space too:
-
-```text
-group.left   = min(image.left, badge.left)
-group.top    = min(image.top, badge.top)
-group.right  = max(image.right, badge.right)
-group.bottom = max(image.bottom, badge.bottom)
-
-group width  = group.right - group.left
-group height = group.bottom - group.top
-```
-
-These bounds include both rectangles.
-Shift them together so the group's top-left starts at the row's padding.
-This reserves room above and beside the image.
-Start the text after the **group width**, not just the icon width.
-Include the group height when calculating the row height.
-
 ### Round only the image
 
-Keep the image and badge as **siblings** in the outer parent.
-Clip only the image to its rounded outline.
-For example, an ImageView with a rounded background outline can use
-`clipToOutline` on supported outline shapes.
-Give the badge its own shape.
-Keep it later in drawing order, or above the image with elevation.
-
-Do not put both children inside the image's rounded clipping area.
-That would clip the part of the badge outside the image.
+The XML gives the ImageView a rounded background and `clipToOutline`.
+It does not clip the outer parent to that shape.
+The badge is a sibling, declared last, with its own background.
+It can cover the icon's corner without being cut off.
 
 With a `FrameLayout`, you need to handle overlap, measured offsets, and the
 wrapper's reserved space.
@@ -621,9 +749,11 @@ measure icon and badge
                 -> place all five children
 ```
 
-If the badge is absent, the group is just the icon.
-If its text changes, the group may need a new size.
+Changing the TextView's text requests a new measurement.
+The parent recalculates the group and remaining text width.
 A drawing translation alone does not update that reserved space.
+This teaching sample requires five visible children.
+Hiding the badge would need an explicit measurement and layout branch.
 
 Now the new request is a set of size and position rules.
 You can implement those rules in a custom parent.
@@ -634,7 +764,7 @@ Neither choice removes the need to decide how the badge affects the text.
 
 Nested layouts can add measurement and placement work.
 But Android does not always measure the whole tree again.
-Our sample keeps four children under one parent.
+Our sample keeps five children under one parent.
 ConstraintLayout can do that too.
 
 This tutorial has no performance comparison.

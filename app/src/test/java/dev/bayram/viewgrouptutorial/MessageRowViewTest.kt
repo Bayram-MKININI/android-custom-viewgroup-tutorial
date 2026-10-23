@@ -28,6 +28,7 @@ class MessageRowViewTest {
         // SETUP
         val view = inflate()
         val icon = view.findViewById<ImageView>(R.id.message_icon)
+        val badge = view.findViewById<TextView>(R.id.message_badge)
         val subject = view.findViewById<TextView>(R.id.message_subject)
         val time = view.findViewById<TextView>(R.id.message_time)
         val body = view.findViewById<TextView>(R.id.message_body)
@@ -44,26 +45,96 @@ class MessageRowViewTest {
 
                 // ASSERT
                 assertEquals(width, view.width)
-                assertEquals(view.paddingTop, icon.top)
+                assertEquals(view.paddingTop, badge.top)
+                assertEquals(badge.width, badge.height)
+                assertEquals(icon.top.toDouble(), (badge.top + badge.bottom) / 2.0, 0.5)
+                assertEquals(icon.right.toDouble(), (badge.left + badge.right) / 2.0, 0.5)
                 assertEquals(view.paddingTop, subject.top)
                 assertEquals(subject.top, time.top)
                 assertEquals(maxOf(subject.bottom, time.bottom) + bodyGap, body.top)
                 if (direction == View.LAYOUT_DIRECTION_LTR) {
-                    assertEquals(iconGap, subject.left - icon.right)
+                    assertEquals(iconGap, subject.left - maxOf(icon.right, badge.right))
                     assertEquals(subject.left, body.left)
                     assertEquals(width - view.paddingRight, time.right)
                     assertTrue(time.left - subject.right >= headerGap)
                 } else {
-                    assertEquals(iconGap, icon.left - subject.right)
+                    assertEquals(iconGap, minOf(icon.left, badge.left) - subject.right)
                     assertEquals(subject.right, body.right)
                     assertEquals(view.paddingLeft, time.left)
                     assertTrue(subject.left - time.right >= headerGap)
                 }
-                assertEquals(maxOf(icon.bottom, body.bottom) + view.paddingBottom, view.height)
+                assertEquals(maxOf(icon.bottom, badge.bottom, body.bottom) + view.paddingBottom, view.height)
                 assertTrue(body.left >= view.paddingLeft)
                 assertTrue(body.right <= width - view.paddingRight)
             }
         }
+    }
+
+    @Test
+    fun `given a growing count - on layout - it should keep the badge centered on the corner and reserve its full bounds`() {
+        // SETUP
+        val view = inflate()
+        val icon = view.findViewById<ImageView>(R.id.message_icon)
+        val badge = view.findViewById<TextView>(R.id.message_badge)
+        val subject = view.findViewById<TextView>(R.id.message_subject)
+        val body = view.findViewById<TextView>(R.id.message_body)
+        val gap = view.resources.getDimensionPixelSize(R.dimen.message_icon_gap)
+        body.text = "A body long enough to fill the available text area. ".repeat(20)
+
+        for (direction in listOf(View.LAYOUT_DIRECTION_LTR, View.LAYOUT_DIRECTION_RTL)) {
+            view.layoutDirection = direction
+            badge.text = "9"
+            layout(view, 1000)
+            val smallBadgeWidth = badge.width
+            val originalBodyWidth = body.width
+
+            for (count in listOf("99+", "12345678901234567890")) {
+                // RUN
+                badge.text = count
+                layout(view, 1000)
+
+                // ASSERT
+                assertTrue(badge.width > smallBadgeWidth)
+                assertTrue(body.width < originalBodyWidth)
+                assertEquals(icon.right.toDouble(), (badge.left + badge.right) / 2.0, 0.5)
+                assertEquals(icon.top.toDouble(), (badge.top + badge.bottom) / 2.0, 0.5)
+                assertEquals(view.paddingTop, minOf(icon.top, badge.top))
+                assertTrue(minOf(icon.left, badge.left) >= view.paddingLeft)
+                assertTrue(maxOf(icon.right, badge.right) <= view.width - view.paddingRight)
+                assertTrue(maxOf(icon.bottom, badge.bottom) <= view.height - view.paddingBottom)
+                if (direction == View.LAYOUT_DIRECTION_LTR) {
+                    assertEquals(view.paddingLeft, minOf(icon.left, badge.left))
+                    assertEquals(gap, subject.left - maxOf(icon.right, badge.right))
+                } else {
+                    assertEquals(view.width - view.paddingRight, maxOf(icon.right, badge.right))
+                    assertEquals(gap, minOf(icon.left, badge.left) - subject.right)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `given a large badge font - on layout - it should reserve space above and below the icon`() {
+        // SETUP
+        val view = inflate()
+        val icon = view.findViewById<ImageView>(R.id.message_icon)
+        val badge = view.findViewById<TextView>(R.id.message_badge)
+        val subject = view.findViewById<TextView>(R.id.message_subject)
+        val time = view.findViewById<TextView>(R.id.message_time)
+        val body = view.findViewById<TextView>(R.id.message_body)
+        subject.text = "Short"
+        time.text = "Now"
+        body.text = "Body"
+        badge.textSize = 120f
+
+        // RUN
+        layout(view, 1000)
+
+        // ASSERT
+        assertTrue(badge.height > 2 * icon.height)
+        assertEquals(icon.top.toDouble(), (badge.top + badge.bottom) / 2.0, 0.5)
+        assertEquals(view.paddingTop, badge.top)
+        assertEquals(badge.bottom + view.paddingBottom, view.height)
     }
 
     @Test

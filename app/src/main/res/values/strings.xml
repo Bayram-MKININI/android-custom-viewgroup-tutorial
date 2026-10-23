@@ -13,8 +13,9 @@
     <string name="message_time">17:17</string>
     <string name="message_body">You can now collect your voucher. Open the message to see where and when it is available.</string>
     <string name="message_priority">Important message</string>
+    <string name="message_badge">9</string>
     <dimen name="message_padding">16dp</dimen>
-    <dimen name="message_icon_size">24dp</dimen>
+    <dimen name="message_icon_size">48dp</dimen>
     <dimen name="message_icon_gap">8dp</dimen>
     <dimen name="message_header_gap">12dp</dimen>
     <dimen name="message_body_gap">8dp</dimen>
