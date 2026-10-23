@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="580" viewBox="0 0 1000 580" role="img" aria-labelledby="title desc">
+  <title id="title">Article preview: one image, a title, and a description</title>
+  <desc id="desc">The image is a square with sides equal to 30 percent of content width. Image and title share a top edge. The text column fills the remaining width after a 16dp gap. The description starts below the title with a gap equal to 25 percent of measured title height. The parent grows to contain the taller column.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="580" rx="16" fill="#ffffff"/>
+  <g font-family="sans-serif" fill="#0f172a">
+    <text x="35" y="42" font-size="25" font-weight="bold">An article preview with three direct children</text>
+    <rect x="80" y="110" width="810" height="360" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+    <text x="105" y="140" font-size="16">Parent padding</text>
+    <path d="M120 87H850" stroke="#475569" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <text x="485" y="76" font-size="18" text-anchor="middle">Content width C (parent width minus padding)</text>
+    <rect x="120" y="175" width="219" height="219" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <path d="M133 380L196 250L250 332L286 291L325 380Z" fill="#2563eb"/>
+    <text x="229" y="210" font-size="20" text-anchor="middle" font-weight="bold">Image</text>
+    <rect x="380" y="175" width="470" height="100" rx="5" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+    <text x="400" y="208" font-size="21" font-weight="bold">Title: it may wrap</text>
+    <text x="400" y="242" font-size="21" font-weight="bold">onto another line</text>
+    <path d="M105 175H870" stroke="#475569" stroke-dasharray="5 5"/>
+    <text x="400" y="162" font-size="16">Same top edge</text>
+    <rect x="380" y="275" width="470" height="25" fill="#ffedd5"/>
+    <text x="400" y="293" font-size="15" fill="#9a3412">Text gap = 25% of title height</text>
+    <rect x="380" y="300" width="470" height="130" rx="5" fill="#fef9c3" stroke="#a16207" stroke-width="2"/>
+    <text x="400" y="336" font-size="20">Description</text>
+    <text x="400" y="369" font-size="18">Same left and right edges as the title.</text>
+    <text x="400" y="400" font-size="18">It can grow taller than the image.</text>
+    <path d="M343 345H376" stroke="#475569" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <text x="229" y="423" font-size="19" text-anchor="middle">Side = 0.3C</text>
+    <text x="359" y="455" font-size="15" text-anchor="middle">16dp</text>
+    <text x="40" y="513" font-size="19">Text width = C - image side - 16dp gap</text>
+    <text x="40" y="546" font-size="18">Parent height = top padding + taller column + bottom padding</text>
+  </g>
+</svg>

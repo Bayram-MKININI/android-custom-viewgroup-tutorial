@@ -8,7 +8,7 @@ import android.widget.ScrollView
 class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.article_preview_example)
         findViewById<ScrollView>(R.id.scroll).setOnApplyWindowInsetsListener { view, insets ->
             @Suppress("DEPRECATION")
             if (android.os.Build.VERSION.SDK_INT >= 30) {
