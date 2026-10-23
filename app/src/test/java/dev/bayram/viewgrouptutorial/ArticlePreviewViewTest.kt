@@ -24,76 +24,133 @@ class ArticlePreviewViewTest {
             .findViewById(R.id.article_preview)
 
     @Test
-    fun `given different widths and reading directions - on layout - it should preserve all size and alignment rules`() {
+    fun `given a title of at most two lines - on layout - it should keep the thumbnail beside both texts`() {
         // SETUP
         val view = inflate()
         val image = view.findViewById<ImageView>(R.id.article_image)
         val title = view.findViewById<TextView>(R.id.article_title)
         val description = view.findViewById<TextView>(R.id.article_description)
-        val gap = view.resources.getDimensionPixelSize(R.dimen.article_column_gap)
+        val columnGap = view.resources.getDimensionPixelSize(R.dimen.article_column_gap)
+        val textGap = view.resources.getDimensionPixelSize(R.dimen.article_text_gap)
 
-        for (width in listOf(240, 600, 1000)) {
+        for (content in listOf("Walk", "Walk\nToday")) {
             for (direction in listOf(View.LAYOUT_DIRECTION_LTR, View.LAYOUT_DIRECTION_RTL)) {
+                title.text = content
                 view.layoutDirection = direction
 
                 // RUN
-                view.measure(
-                    MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
-                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-                )
-                view.layout(0, 0, view.measuredWidth, view.measuredHeight)
+                layout(view, 600)
 
                 // ASSERT
-                val contentWidth = width - view.paddingLeft - view.paddingRight
-                assertEquals(width, view.width)
+                assertTrue(title.lineCount <= 2)
+                assertEquals((content.count { it == '\n' } + 1), title.lineCount)
+                val contentWidth = view.width - view.paddingLeft - view.paddingRight
                 assertEquals((contentWidth * 0.3).toInt(), image.width)
                 assertEquals(image.width, image.height)
-                assertEquals(title.top, image.top)
-                assertEquals(view.paddingTop, title.top)
+                assertEquals(view.paddingTop, image.top)
+                assertEquals(image.top, title.top)
+                assertEquals(textGap, description.top - title.bottom)
                 assertEquals(title.left, description.left)
                 assertEquals(title.right, description.right)
-                assertEquals((title.height * 0.25).toInt(), description.top - title.bottom)
-                assertEquals(contentWidth - image.width - gap, title.width)
                 if (direction == View.LAYOUT_DIRECTION_LTR) {
-                    assertEquals(gap, title.left - image.right)
+                    assertEquals(columnGap, title.left - image.right)
                 } else {
-                    assertEquals(gap, image.left - title.right)
+                    assertEquals(columnGap, image.left - title.right)
                 }
                 assertEquals(
-                    view.paddingTop + maxOf(image.height, title.height +
-                        (title.height * 0.25).toInt() + description.height) + view.paddingBottom,
+                    view.paddingTop + maxOf(image.height, title.height + textGap + description.height) +
+                        view.paddingBottom,
                     view.height
                 )
-                assertTrue(description.right <= width - view.paddingRight)
-                assertTrue(image.left >= view.paddingLeft)
             }
         }
     }
 
     @Test
-    fun `given a longer title - on measuring again - it should move the description down and increase the gap`() {
+    fun `given a three line title - on layout - it should put a full width image above both texts`() {
+        // SETUP
+        val view = inflate()
+        val image = view.findViewById<ImageView>(R.id.article_image)
+        val title = view.findViewById<TextView>(R.id.article_title)
+        val description = view.findViewById<TextView>(R.id.article_description)
+        title.text = "Walk\nThrough\nTown"
+        val gap = view.resources.getDimensionPixelSize(R.dimen.article_column_gap)
+        val textGap = view.resources.getDimensionPixelSize(R.dimen.article_text_gap)
+
+        for (direction in listOf(View.LAYOUT_DIRECTION_LTR, View.LAYOUT_DIRECTION_RTL)) {
+            view.layoutDirection = direction
+
+            // RUN
+            layout(view, 600)
+
+            // ASSERT
+            assertEquals(3, title.lineCount)
+            val contentWidth = view.width - view.paddingLeft - view.paddingRight
+            assertEquals(contentWidth, image.width)
+            assertEquals((contentWidth * 9.0 / 16).toInt(), image.height)
+            assertEquals(view.paddingLeft, image.left)
+            assertEquals(view.paddingLeft, title.left)
+            assertEquals(contentWidth, title.width)
+            assertEquals(gap, title.top - image.bottom)
+            assertEquals(textGap, description.top - title.bottom)
+            assertEquals(title.left, description.left)
+            assertEquals(title.right, description.right)
+            assertEquals(description.bottom + view.paddingBottom, view.height)
+        }
+    }
+
+    @Test
+    fun `given changing text at the same width - on layout - it should switch arrangements in both directions`() {
         // SETUP
         val view = inflate()
         val title = view.findViewById<TextView>(R.id.article_title)
-        val description = view.findViewById<TextView>(R.id.article_description)
-        val widthSpec = MeasureSpec.makeMeasureSpec(400, MeasureSpec.EXACTLY)
-        val heightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        title.text = "Walk"
-        view.measure(widthSpec, heightSpec)
-        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
-        val oldTitleHeight = title.height
-        val oldDescriptionTop = description.top
-        val oldGap = description.top - title.bottom
+        val image = view.findViewById<ImageView>(R.id.article_image)
+        val width = 400
 
         // RUN
+        title.text = "Walk"
+        layout(view, width)
+        val shortTitleTop = title.top
         title.text = "A long walk through the quiet streets of a city with many places to discover"
-        view.measure(widthSpec, heightSpec)
-        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
+        layout(view, width)
+        val longTitleTop = title.top
+        val stackedImageWidth = image.width
+        title.text = "Walk"
+        layout(view, width)
 
         // ASSERT
-        assertTrue(title.height > oldTitleHeight)
-        assertTrue(description.top > oldDescriptionTop)
-        assertTrue(description.top - title.bottom > oldGap)
-        assertEquals((title.height * 0.25).toInt(), description.top - title.bottom)
+        assertTrue(longTitleTop > shortTitleTop)
+        assertEquals(width - view.paddingLeft - view.paddingRight, stackedImageWidth)
+        assertEquals(image.top, title.top)
+        assertTrue(image.width < stackedImageWidth)
+    }
+
+    @Test
+    fun `given the same title at different widths - on layout - it should choose based on wrapped text`() {
+        // SETUP
+        val view = inflate()
+        val title = view.findViewById<TextView>(R.id.article_title)
+        val image = view.findViewById<ImageView>(R.id.article_image)
+        title.text = "A quiet walk through the city"
+
+        // RUN
+        layout(view, 240)
+        val narrowImageWidth = image.width
+        val narrowTitleTop = title.top
+        layout(view, 1000)
+
+        // ASSERT
+        assertEquals(240 - view.paddingLeft - view.paddingRight, narrowImageWidth)
+        assertTrue(narrowTitleTop > view.paddingTop)
+        assertEquals(view.paddingTop, title.top)
+        assertTrue(title.lineCount <= 2)
+    }
+
+    private fun layout(view: ArticlePreviewView, width: Int) {
+        view.measure(
+            MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        )
+        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
     }
 }

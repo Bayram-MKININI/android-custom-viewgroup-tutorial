@@ -8,4 +8,5 @@
     <string name="article_title">A quiet walk through the city</string>
     <string name="article_description">Discover small streets, local shops, and places to stop along the way.</string>
     <dimen name="article_column_gap">16dp</dimen>
+    <dimen name="article_text_gap">8dp</dimen>
 </resources>

@@ -1,21 +1,21 @@
-# Build an article preview with a custom ViewGroup
+# Let the text choose the layout
 
-You need one image and two texts.
-The image sits beside a title and a description.
-Then the design adds a gap that depends on the title's height.
+You are building a news preview.
+It has a photo, a title, and a description.
+A short title looks good beside the photo.
+A long title becomes hard to read in that narrow column.
 
-We will build this row step by step.
-XML describes the content.
-Kotlin controls its size and position.
+What if the preview could switch layouts based on the actual text?
 
+This guide builds a custom Android `ViewGroup` for that rule.
 You need basic Kotlin and Android XML knowledge.
-The idea comes from the layouts in [Yumi](https://github.com/Bayram-MKININI/Yumi).
+The idea comes from the custom layouts in [Yumi](https://github.com/Bayram-MKININI/Yumi).
 
 ## Start here
 
-Clone this project first.
-All code examples use its package and resources.
-You do not need to create a new Android project.
+Clone this project.
+All examples use its package and resources.
+You do not need to create another Android project.
 
 Use Android Studio, JDK 17, and Android SDK 36.
 
@@ -24,11 +24,10 @@ git clone https://github.com/Bayram-MKININI/android-custom-viewgroup-tutorial.gi
 cd android-custom-viewgroup-tutorial
 ```
 
-Open the project in Android Studio to set the SDK location.
+Open it in Android Studio to set the SDK location.
 Or set `ANDROID_HOME` to your SDK.
 
-The finished article preview is already the default screen.
-You can run it now:
+The finished preview is already the default screen:
 
 ```sh
 ./gradlew :app:assembleDebug
@@ -39,87 +38,84 @@ The install command needs a device or emulator running API 24 or newer.
 Open **Custom ViewGroup Tutorial**.
 The first build needs internet access.
 
-## 1. The first design needs no custom layout
+## 1. Start with a normal article row
 
-You start with a fixed image, a title, and a description:
+The photo sits beside the title and description:
 
 ```text
 +---------+    +------------------------+
 |         |    | Title                  |
-|  Image  |    +------------------------+
+|  Photo  |    +------------------------+
 |         |    | Description            |
 +---------+    +------------------------+
 ```
 
-A horizontal `LinearLayout` can hold the image and a text column.
-A vertical `LinearLayout` can hold the two texts.
+A horizontal `LinearLayout` can hold the photo and a vertical text column.
+`ConstraintLayout` can also place all three children in one parent.
+Use those layouts when this is all you need.
+
+Our row has simple spacing rules:
+
+- The photo is square. Its side is 30% of the content width.
+- The photo and title share the same top edge.
+- The title and description have the same width.
+- There is 16dp between the columns and 8dp between the texts.
+
+**Content width** is the parent width minus its left and right padding.
+The description may extend below the photo.
+
+None of this alone requires a custom layout.
+
+## 2. A longer title changes the problem
+
+Now try a long headline.
+It may need four or five lines beside the photo.
+This creates a tall, narrow block of text.
+
+The design team asks for a clear rule:
+
+> Try the title beside the photo.
+> If it needs more than two lines, put the photo above both texts.
+> Give the texts the full content width.
+
+![The same news preview in a row and a stacked arrangement, chosen from the title's trial line count.](docs/images/article-preview.svg)
+
+In the stacked version, the photo becomes a full-width 16:9 image.
+Keep the 16dp gap below it.
+Keep the 8dp gap between the texts.
+Do not cut or hide title lines in either version.
+
+This is a real readability rule.
+It reacts to the title, translation, font size, and available width.
+
+## 3. A screen-width breakpoint is not enough
+
+You could switch layouts below a fixed screen width.
+But two titles can need different layouts at the **same width**.
+A larger font can change the result too.
+
+You need to know how the title actually wraps.
+Counting characters is not enough.
+Different letters and words take different space.
+
+Standard `LinearLayout` and `ConstraintLayout` attributes cannot say:
 
 ```text
-Horizontal LinearLayout
-    -> ImageView
-    -> Vertical LinearLayout
-        -> Title TextView
-        -> Description TextView
+Choose the arrangement from this TextView's measured line count.
 ```
 
-That is a normal use of nested layouts.
-There is nothing wrong with it.
-`ConstraintLayout` could also place all three children in one parent.
+Adding nested layouts does not add that decision.
+You need code.
 
-## 2. Add exact sizes and positions
+**This is not impossible with standard layouts plus code.**
+You could measure text and switch between two standard layouts.
+Here, a custom parent keeps the decision and placement in one place.
+It also avoids waiting for a displayed row before changing it.
 
-Now the design gives more detail:
+## 4. Measure a candidate before choosing
 
-1. Make the image square.
-2. Each side is **30% of the content width**.
-3. Leave **16dp** between the image and text column.
-4. Align the title's top with the image's top.
-5. Give the title and description the same left and right edges.
-6. Let the description continue below the image if needed.
-
-**Content width** means the parent width minus its left and right padding.
-It does not mean the full screen width.
-
-![Article preview with one square image, a title, and a description. Labels show widths, gaps, and aligned edges.](docs/images/article-preview.svg)
-
-These rules alone do not require a custom ViewGroup.
-`ConstraintLayout` can express this arrangement.
-The 30% width is not the hard part.
-
-But there is one more rule.
-
-## 3. The text gap must follow the title height
-
-The space between the title and description must be:
-
-```text
-text gap = 25% of measured title height
-```
-
-Why use this rule?
-In this teaching design, a taller title gets more space below it.
-It is a design choice, not a general UI rule.
-
-Suppose the title height is 40 pixels.
-The gap is 10 pixels.
-If a longer title becomes 80 pixels tall, the gap becomes 20 pixels.
-
-A fixed XML margin does not follow that change.
-Adding another layout does not calculate it either.
-There is no general ConstraintLayout margin expression for
-`title.measuredHeight * 0.25`.
-
-We need a small calculation after measuring the title.
-We could add code around a standard layout.
-Here, we will put all the size and position rules in one custom parent.
-
-## 4. Give the parent three children
-
-A `ViewGroup` is a View that contains other Views.
-It is the **parent**.
-The Views inside it are its **children**.
-
-Our structure is:
+A `ViewGroup` is a View that contains child Views.
+Our parent has three direct children:
 
 ```text
 ArticlePreviewView
@@ -128,59 +124,27 @@ ArticlePreviewView
     -> Description TextView
 ```
 
-We keep native text and image drawing.
-We only replace the layout rules.
-
-There are two jobs:
-
-- `onMeasure()` finds the sizes.
-- `onLayout()` assigns the positions.
-
-Let's do them in that order.
-
-## 5. Find the sizes in onMeasure
-
-Android gives the parent a width limit.
-In this sample, the parent must use that exact width.
-
-First, remove the padding.
-Then calculate the image and text widths:
-
-```kotlin
-val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-val imageSide = (contentWidth * 0.3).toInt()
-val textWidth = contentWidth - imageSide - columnGap
-```
-
-`columnGap` comes from the `16dp` resource.
-Android converts it to pixels.
-All measurement code works in pixels.
-
-For example:
+Its measurement plan is:
 
 ```text
-content width       400px
-image side          120px  (30% of 400)
-column gap           16px  (if density makes 16dp equal 16px)
-text width          264px
+Calculate the row's text width
+    -> measure the title at that width
+        -> title needs at most 2 lines: keep the row
+        -> title needs more than 2 lines: choose the stack
+            -> measure the title again at full width
 ```
 
-Measure the image as a square.
-Measure both texts at the calculated text width.
-Let the texts grow in height:
+The decision always uses the **trial row width**.
+Do not check the full-width title and switch back.
+That could make the decision alternate between layouts.
 
-```kotlin
-val imageSpec = MeasureSpec.makeMeasureSpec(imageSide, MeasureSpec.EXACTLY)
-image.measure(imageSpec, imageSpec)
+## 5. Put the size decision in onMeasure
 
-val textWidthSpec = MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY)
-val textHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-title.measure(textWidthSpec, textHeightSpec)
-textGap = (title.measuredHeight * 0.25).toInt()
-description.measure(textWidthSpec, textHeightSpec)
-```
+`onMeasure()` measures the children and reports the parent's size.
+It does not place or draw them.
 
-A `MeasureSpec` is a size with a rule:
+Android provides a `MeasureSpec` for each direction.
+A spec contains a size and a rule:
 
 | Mode | Meaning |
 | --- | --- |
@@ -188,87 +152,124 @@ A `MeasureSpec` is a size with a rule:
 | `AT_MOST` | Use up to this size |
 | `UNSPECIFIED` | No limit for this width or height |
 
-Notice the order.
-The title is measured before we calculate its gap.
-We do not guess how many lines it will use.
+Our sample receives an exact width.
+A surrounding `ScrollView` lets it grow in height.
 
-The parent must contain the taller column:
+First, calculate the candidate row width:
 
 ```kotlin
-val textColumnHeight = title.measuredHeight + textGap + description.measuredHeight
-val desiredHeight =
-    paddingTop + maxOf(imageSide, textColumnHeight) + paddingBottom
+val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+val thumbnailSide = (contentWidth * 0.3).toInt()
+val rowTextWidth = contentWidth - thumbnailSide - columnGap
 ```
 
-The full class reports its size with `setMeasuredDimension()`.
-It uses `resolveSizeAndState()` to follow Android's measurement rules.
-
-Measuring does not place a child.
-It only gives us `measuredWidth` and `measuredHeight`.
-
-## 6. Assign positions in onLayout
-
-For left-to-right reading, use these rules:
+For example, with 400px of content width and a 16px column gap:
 
 ```text
-image.left      = left padding
-image.top       = top padding
-
-title.left      = image.right + column gap
-title.top       = image.top
-
-description.left = title.left
-description.top  = title.bottom + text gap
+thumbnail side = 120px
+text width     = 400 - 120 - 16 = 264px
 ```
 
-Call `layout()` to assign each rectangle:
+The actual column gap is a 16dp resource.
+Android converts it to pixels using device density.
+All our size calculations use pixels.
+
+Now measure the title at that text width:
+
+```kotlin
+val textHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+title.measure(
+    MeasureSpec.makeMeasureSpec(rowTextWidth, MeasureSpec.EXACTLY),
+    textHeightSpec
+)
+arrangement = if (title.lineCount <= 2) Arrangement.ROW else Arrangement.STACKED
+```
+
+After `measure()`, `TextView` knows its line count at that width.
+There is no `maxLines` or ellipsis here.
+We need the real number of lines, not a count already cut to two.
+
+For the row, keep the measured title and square thumbnail.
+For the stack, remeasure the title at the full content width.
+Use that same width for the description.
+The complete code below handles both cases.
+
+The parent height follows the chosen arrangement:
+
+```text
+ROW:
+    max(image height, title height + 8dp + description height)
+
+STACKED:
+    image height + 16dp + title height + 8dp + description height
+```
+
+Add top and bottom padding to either result.
+Use `resolveSizeAndState()` and `setMeasuredDimension()` to report the size.
+
+The stacked case measures the title twice.
+That is deliberate: once to choose the layout, then once at its final width.
+Custom layouts are not always single-pass layouts.
+
+## 6. Place the chosen arrangement in onLayout
+
+Now the child sizes are known.
+`onLayout()` assigns their rectangles.
+It uses the arrangement already chosen during measurement.
+
+For the row:
+
+```text
+Image and title start at the top padding.
+Text starts after the image and column gap.
+Description starts below the title and text gap.
+```
+
+For the stack:
+
+```text
+Image starts at the top padding.
+Title starts below the image and column gap.
+Description starts below the title and text gap.
+```
+
+Each child receives `layout(left, top, right, bottom)`.
+For example:
 
 ```kotlin
 title.layout(
     textLeft,
-    paddingTop,
+    titleTop,
     textLeft + title.measuredWidth,
-    paddingTop + title.measuredHeight
+    titleTop + title.measuredHeight
 )
 ```
 
-The four arguments are **left, top, right, bottom**.
-They are not x, y, width, height.
-All positions are local to the parent.
+These are edges, not x, y, width, height.
+Coordinates are inside the parent, not the screen.
+The row also mirrors for right-to-left layouts.
 
-The finished class also handles right-to-left layouts.
-It puts the image on the right and the text column on the left.
+### Do we need onDraw?
 
-### What about onDraw?
-
-We do not need it.
-`onDraw()` paints a View's own custom content.
-It does not size or place children.
-
-`TextView` already draws text.
-`ImageView` already draws its image.
+No. `onDraw()` paints a View's own custom content.
+It does not measure or place children.
+The two `TextView`s draw their text.
+The `ImageView` draws its image.
 Android draws the children through `dispatchDraw()`.
 
-![Measurement decides sizes, layout assigns rectangles, and drawing paints content.](docs/images/viewgroup-phases.svg)
+![The three jobs: measure sizes, assign rectangles, and draw content.](docs/images/viewgroup-phases.svg)
 
 Use `requestLayout()` when your own size or position rules change.
 Use `invalidate()` when only your custom drawing changes.
-These request work later.
 Android does not have to run all three methods on every frame.
 
 ## 7. The complete example
 
-The sample uses a `ScrollView`.
-It gives the row room to grow vertically.
-The row must receive an exact width and no height limit.
-
-All three children must stay visible.
-Child margins are not supported.
-The parent handles the gaps itself.
-
 ### XML
 
-This is `app/src/main/res/layout/article_preview_example.xml`:
+The [layout file](app/src/main/res/layout/article_preview_example.xml) contains
+the three children inside our parent.
+That parent sits inside a `ScrollView`.
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -311,25 +312,22 @@ This is `app/src/main/res/layout/article_preview_example.xml`:
 </ScrollView>
 ```
 
-The parent supplies exact child widths in code.
-For this component, those calculations replace the XML `wrap_content` sizes.
-`centerCrop` fills the image box and crops any extra picture area.
+Our parent supplies the final child widths.
+Those calculations replace the XML `wrap_content` widths here.
+`centerCrop` fills the image box and crops extra picture area.
 It does not set the box size.
 
-This image is decoration.
-It is hidden from screen readers.
-If an image gives useful information, use a translated `contentDescription`.
+The photo is decorative in this example.
+For a photo that adds useful information, give it a translated
+`contentDescription` instead of hiding it from screen readers.
 
 The project includes the [text and spacing resources](app/src/main/res/values/strings.xml)
-and the [image](app/src/main/res/drawable/example_landscape.xml).
+and [image](app/src/main/res/drawable/example_landscape.xml).
 
 ### Kotlin
 
-This is the full class in
-`app/src/main/java/dev/bayram/viewgrouptutorial/ArticlePreviewView.kt`.
-
-Android creates the parent before its XML children are ready.
-We find them in `onFinishInflate()`, after they exist.
+This is the complete [ArticlePreviewView.kt](app/src/main/java/dev/bayram/viewgrouptutorial/ArticlePreviewView.kt).
+`onFinishInflate()` finds the children after Android creates them from XML.
 
 ```kotlin
 package dev.bayram.viewgrouptutorial
@@ -341,7 +339,7 @@ import android.widget.ImageView
 import android.widget.TextView
 
 /**
- * Keeps the image and title top-aligned, with a text gap based on title height.
+ * Stacks the preview when the title needs more than two lines beside the image.
  * Requires exact width, unbounded height, and three visible XML children without margins.
  */
 class ArticlePreviewView @JvmOverloads constructor(
@@ -354,7 +352,10 @@ class ArticlePreviewView @JvmOverloads constructor(
     private lateinit var title: TextView
     private lateinit var description: TextView
     private val columnGap = resources.getDimensionPixelSize(R.dimen.article_column_gap)
-    private var textGap = 0
+    private val textGap = resources.getDimensionPixelSize(R.dimen.article_text_gap)
+    private var arrangement = Arrangement.ROW
+
+    private enum class Arrangement { ROW, STACKED }
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -378,20 +379,48 @@ class ArticlePreviewView @JvmOverloads constructor(
             "This example requires all three children to be visible"
         }
         val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-        val imageSide = (contentWidth * 0.3).toInt()
-        val textWidth = contentWidth - imageSide - columnGap
-        require(textWidth > 0) { "Not enough width for padding, image, and column gap" }
+        val thumbnailSide = (contentWidth * 0.3).toInt()
+        val rowTextWidth = contentWidth - thumbnailSide - columnGap
+        require(rowTextWidth > 0) { "Not enough width for padding, image, and column gap" }
 
-        val imageSpec = MeasureSpec.makeMeasureSpec(imageSide, MeasureSpec.EXACTLY)
-        image.measure(imageSpec, imageSpec)
-
-        val textWidthSpec = MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY)
         val textHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        title.measure(textWidthSpec, textHeightSpec)
-        textGap = (title.measuredHeight * 0.25).toInt()
+        title.measure(
+            MeasureSpec.makeMeasureSpec(rowTextWidth, MeasureSpec.EXACTLY),
+            textHeightSpec
+        )
+        arrangement = if (title.lineCount <= 2) Arrangement.ROW else Arrangement.STACKED
+
+        val imageWidth: Int
+        val imageHeight: Int
+        val textWidth: Int
+        when (arrangement) {
+            Arrangement.ROW -> {
+                imageWidth = thumbnailSide
+                imageHeight = thumbnailSide
+                textWidth = rowTextWidth
+            }
+            Arrangement.STACKED -> {
+                imageWidth = contentWidth
+                imageHeight = (contentWidth * 9.0 / 16).toInt()
+                textWidth = contentWidth
+                title.measure(
+                    MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY),
+                    textHeightSpec
+                )
+            }
+        }
+        image.measure(
+            MeasureSpec.makeMeasureSpec(imageWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(imageHeight, MeasureSpec.EXACTLY)
+        )
+        val textWidthSpec = MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY)
         description.measure(textWidthSpec, textHeightSpec)
 
         val textColumnHeight = title.measuredHeight + textGap + description.measuredHeight
+        val contentHeight = when (arrangement) {
+            Arrangement.ROW -> maxOf(imageHeight, textColumnHeight)
+            Arrangement.STACKED -> imageHeight + columnGap + textColumnHeight
+        }
         val childState = combineMeasuredStates(
             image.measuredState,
             combineMeasuredStates(title.measuredState, description.measuredState)
@@ -405,7 +434,7 @@ class ArticlePreviewView @JvmOverloads constructor(
             resolveSizeAndState(
                 maxOf(
                     suggestedMinimumHeight,
-                    paddingTop + maxOf(imageSide, textColumnHeight) + paddingBottom
+                    paddingTop + contentHeight + paddingBottom
                 ),
                 heightMeasureSpec,
                 childState shl MEASURED_HEIGHT_STATE_SHIFT
@@ -416,7 +445,14 @@ class ArticlePreviewView @JvmOverloads constructor(
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
         val imageLeft = if (rtl) right - left - paddingRight - image.measuredWidth else paddingLeft
-        val textLeft = if (rtl) paddingLeft else imageLeft + image.measuredWidth + columnGap
+        val textLeft = when (arrangement) {
+            Arrangement.ROW -> if (rtl) paddingLeft else imageLeft + image.measuredWidth + columnGap
+            Arrangement.STACKED -> paddingLeft
+        }
+        val titleTop = when (arrangement) {
+            Arrangement.ROW -> paddingTop
+            Arrangement.STACKED -> paddingTop + image.measuredHeight + columnGap
+        }
 
         image.layout(
             imageLeft,
@@ -426,9 +462,9 @@ class ArticlePreviewView @JvmOverloads constructor(
         )
         title.layout(
             textLeft,
-            paddingTop,
+            titleTop,
             textLeft + title.measuredWidth,
-            paddingTop + title.measuredHeight
+            titleTop + title.measuredHeight
         )
         val descriptionTop = title.bottom + textGap
         description.layout(
@@ -441,28 +477,34 @@ class ArticlePreviewView @JvmOverloads constructor(
 }
 ```
 
-`require()` reports uses this example does not support.
-`combineMeasuredStates()` passes on child size warnings.
-`resolveSizeAndState()` reports sizes under the parent's rules.
-The height warning flags need `MEASURED_HEIGHT_STATE_SHIFT`.
+`arrangement` stores the measurement decision for `onLayout()`.
+Every measurement starts by trying the row again.
+This lets the preview switch back after the title becomes shorter.
 
-These are Android details around our main rule:
-**measure the title, calculate its gap, then place the description**.
+`combineMeasuredStates()` collects child size-warning flags.
+`resolveSizeAndState()` keeps those flags and applies parent limits.
+The height flags need `MEASURED_HEIGHT_STATE_SHIFT`.
+These are Android details around the main layout rule.
 
-## 8. Change the text and watch the result
+**Scope of this sample:** exact width, unbounded height, three visible children,
+and no child margins.
+The `require()` checks report unsupported uses.
+Keep the `ScrollView` setup shown above, without `fillViewport`.
+This is a teaching component, not a general layout container.
 
-Open [the string resources](app/src/main/res/values/strings.xml).
-Replace the title with a longer sentence.
-Run the app again.
+## 8. Try the rule
 
-The title should use more lines when needed.
-Its gap should grow with its measured height.
-The description should move down.
-The image must stay square and keep its top aligned with the title.
-The parent must grow enough to contain both columns.
+Change `article_title` in [strings.xml](app/src/main/res/values/strings.xml).
+Try `"Walk"` first, then a long headline.
+Build and run again.
 
-Also try large fonts, a narrow window, and right-to-left layout.
-Check the screen with a screen reader.
+At the same width, the short title should keep the row.
+A title needing more than two lines **in the trial row** should choose the stack.
+It may use fewer lines after it gets the full width.
+That does not change the decision for that measurement.
+
+Also try a larger font, a narrow window, and right-to-left layout.
+The layout should respond to actual text measurement, not just window width.
 
 Run the tests and Android lint:
 
@@ -471,27 +513,26 @@ Run the tests and Android lint:
 ```
 
 The [tests](app/src/test/java/dev/bayram/viewgrouptutorial/ArticlePreviewViewTest.kt)
-check image size, both gaps, text edges, parent height, and reading direction.
-They also check the result after the title becomes longer.
+check the exact two-line boundary, row and stacked geometry, RTL, width changes,
+and switching in both directions after text changes.
+They use native text rendering in Robolectric so wrapping is measured.
+Also check readability and accessibility on a device.
 
 ## A short note about performance
 
 Nested layouts can add measurement and placement work.
-A size change may affect parents and other children.
 But Android does not always measure the whole tree again.
+Our custom parent removes the need for a nested text column.
+It also measures the title twice when choosing the stack.
 
-Our custom parent keeps all three children in one layer.
-That does not prove it is faster.
-This project has no performance comparison.
-Measure the same screen both ways before claiming a speedup.
-
-Use standard layouts when they fit.
-Use a custom parent when the rules are clearer as code.
+This example teaches a content-based layout decision.
+It does not prove a speedup.
+Measure equivalent implementations before making that claim.
 
 ## References
 
-- [Article preview source](app/src/main/java/dev/bayram/viewgrouptutorial/ArticlePreviewView.kt)
-- [Article preview XML](app/src/main/res/layout/article_preview_example.xml)
+- [Preview source](app/src/main/java/dev/bayram/viewgrouptutorial/ArticlePreviewView.kt)
+- [Preview XML](app/src/main/res/layout/article_preview_example.xml)
 - [Custom Android components](https://developer.android.com/develop/ui/views/layout/custom-views/custom-components)
 - [MeasureSpec](https://developer.android.com/reference/android/view/View.MeasureSpec)
 - [Macrobenchmark](https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview)

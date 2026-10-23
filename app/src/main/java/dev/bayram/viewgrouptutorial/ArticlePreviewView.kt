@@ -7,7 +7,7 @@ import android.widget.ImageView
 import android.widget.TextView
 
 /**
- * Keeps the image and title top-aligned, with a text gap based on title height.
+ * Stacks the preview when the title needs more than two lines beside the image.
  * Requires exact width, unbounded height, and three visible XML children without margins.
  */
 class ArticlePreviewView @JvmOverloads constructor(
@@ -20,7 +20,10 @@ class ArticlePreviewView @JvmOverloads constructor(
     private lateinit var title: TextView
     private lateinit var description: TextView
     private val columnGap = resources.getDimensionPixelSize(R.dimen.article_column_gap)
-    private var textGap = 0
+    private val textGap = resources.getDimensionPixelSize(R.dimen.article_text_gap)
+    private var arrangement = Arrangement.ROW
+
+    private enum class Arrangement { ROW, STACKED }
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -44,20 +47,48 @@ class ArticlePreviewView @JvmOverloads constructor(
             "This example requires all three children to be visible"
         }
         val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-        val imageSide = (contentWidth * 0.3).toInt()
-        val textWidth = contentWidth - imageSide - columnGap
-        require(textWidth > 0) { "Not enough width for padding, image, and column gap" }
+        val thumbnailSide = (contentWidth * 0.3).toInt()
+        val rowTextWidth = contentWidth - thumbnailSide - columnGap
+        require(rowTextWidth > 0) { "Not enough width for padding, image, and column gap" }
 
-        val imageSpec = MeasureSpec.makeMeasureSpec(imageSide, MeasureSpec.EXACTLY)
-        image.measure(imageSpec, imageSpec)
-
-        val textWidthSpec = MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY)
         val textHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        title.measure(textWidthSpec, textHeightSpec)
-        textGap = (title.measuredHeight * 0.25).toInt()
+        title.measure(
+            MeasureSpec.makeMeasureSpec(rowTextWidth, MeasureSpec.EXACTLY),
+            textHeightSpec
+        )
+        arrangement = if (title.lineCount <= 2) Arrangement.ROW else Arrangement.STACKED
+
+        val imageWidth: Int
+        val imageHeight: Int
+        val textWidth: Int
+        when (arrangement) {
+            Arrangement.ROW -> {
+                imageWidth = thumbnailSide
+                imageHeight = thumbnailSide
+                textWidth = rowTextWidth
+            }
+            Arrangement.STACKED -> {
+                imageWidth = contentWidth
+                imageHeight = (contentWidth * 9.0 / 16).toInt()
+                textWidth = contentWidth
+                title.measure(
+                    MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY),
+                    textHeightSpec
+                )
+            }
+        }
+        image.measure(
+            MeasureSpec.makeMeasureSpec(imageWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(imageHeight, MeasureSpec.EXACTLY)
+        )
+        val textWidthSpec = MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY)
         description.measure(textWidthSpec, textHeightSpec)
 
         val textColumnHeight = title.measuredHeight + textGap + description.measuredHeight
+        val contentHeight = when (arrangement) {
+            Arrangement.ROW -> maxOf(imageHeight, textColumnHeight)
+            Arrangement.STACKED -> imageHeight + columnGap + textColumnHeight
+        }
         val childState = combineMeasuredStates(
             image.measuredState,
             combineMeasuredStates(title.measuredState, description.measuredState)
@@ -71,7 +102,7 @@ class ArticlePreviewView @JvmOverloads constructor(
             resolveSizeAndState(
                 maxOf(
                     suggestedMinimumHeight,
-                    paddingTop + maxOf(imageSide, textColumnHeight) + paddingBottom
+                    paddingTop + contentHeight + paddingBottom
                 ),
                 heightMeasureSpec,
                 childState shl MEASURED_HEIGHT_STATE_SHIFT
@@ -82,7 +113,14 @@ class ArticlePreviewView @JvmOverloads constructor(
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
         val imageLeft = if (rtl) right - left - paddingRight - image.measuredWidth else paddingLeft
-        val textLeft = if (rtl) paddingLeft else imageLeft + image.measuredWidth + columnGap
+        val textLeft = when (arrangement) {
+            Arrangement.ROW -> if (rtl) paddingLeft else imageLeft + image.measuredWidth + columnGap
+            Arrangement.STACKED -> paddingLeft
+        }
+        val titleTop = when (arrangement) {
+            Arrangement.ROW -> paddingTop
+            Arrangement.STACKED -> paddingTop + image.measuredHeight + columnGap
+        }
 
         image.layout(
             imageLeft,
@@ -92,9 +130,9 @@ class ArticlePreviewView @JvmOverloads constructor(
         )
         title.layout(
             textLeft,
-            paddingTop,
+            titleTop,
             textLeft + title.measuredWidth,
-            paddingTop + title.measuredHeight
+            titleTop + title.measuredHeight
         )
         val descriptionTop = title.bottom + textGap
         description.layout(
