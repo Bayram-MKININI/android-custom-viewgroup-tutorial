@@ -88,8 +88,8 @@ Now imagine one more request.
 
 ### "Can we add a badge on the icon?"
 
-Put a small count badge near the icon's upper-right corner, like Yumi's menu badges.
-Keep the subject and body where they are.
+Put a small count badge on the image's upper-right corner.
+The image may have rounded corners too.
 
 Your horizontal layout puts children beside each other.
 It does not overlap them.
@@ -107,24 +107,27 @@ Horizontal layout
         -> Body
 ```
 
-That can place a badge **inside** the icon's corner.
-But Yumi's notification badge has a more precise rule:
+That can place a badge **inside** the image's corner.
+But the new request is more precise:
 
-> Start the badge halfway across the icon.
-> Put its top below the icon's top by 30% of the badge's own height.
+> Put the badge's center exactly on the image's upper-right corner.
+> Let the badge extend outside the image.
+> Keep the image rounded, but do not clip the badge.
 
-These rules come from
-[Yumi's HomeMenuView](https://github.com/Bayram-MKININI/Yumi/blob/5b4032fbfc7bdf707d5f597b137aeff3db819515/app/src/main/java/net/noliaware/yumi/feature_categories/presentation/views/HomeMenuView.kt).
-The notification badge starts at 50% of the icon width.
-The mail badge starts at 60%.
-Both use the badge's measured height for the top offset.
+Here, "corner" means the upper-right corner of the image's rectangular bounds.
+It does not mean a point along the rounded outline.
 
-An ordinary top-right alignment is not exactly the same rule.
-It keeps the badge's right edge fixed.
-Yumi keeps the badge's **left edge** tied to a point inside the icon.
-When `9` changes to `99+`, the badge grows to the right.
+You try a fixed offset.
+It works with `9`.
+Then the count becomes `99+`.
+The badge gets wider.
+You need a new offset to keep its center on the same corner.
 
-![Yumi-style notification badge: its left edge starts halfway across the icon, and its top is offset by 30% of its own height. A larger count grows to the right.](docs/images/message-badge.svg)
+You also round the image.
+If the badge is inside the same rounded, clipped container, it can be cut off.
+Now placement and clipping are two separate problems.
+
+![A badge centered on a rounded image's upper-right corner. A wider count keeps the same center and extends farther outside the image.](docs/images/message-badge.svg)
 
 Now ask:
 
@@ -136,8 +139,8 @@ Now ask:
 Adding a wrapper did not answer those questions.
 You need a clear rule for the size of the group.
 
-This is a **possible extension to the message row**.
-The badge rule is real, but it comes from Yumi's menu, not its message row.
+This is a **new design extension to the real message row**.
+This exact center-on-corner rule is not taken from Yumi's source.
 The runnable sample below keeps the real row's four children.
 We return to this badge extension after building that row.
 
@@ -538,41 +541,68 @@ This section explains the extension; it is **not included in the runnable sample
 
 First, choose the behavior:
 
-> Use the upper-corner position from Yumi's notification menu badge.
+> Center the badge on the image's upper-right corner.
 > Keep the whole badge inside the row.
 > Start the text after the whole icon-and-badge group.
 
-Yumi's original formula uses physical right.
-For this message-row extension, we can mirror it in RTL.
-That mirroring is an added behavior, not part of the original formula.
+This rule uses physical right.
+If the design should follow reading direction, mirror it in RTL.
 
 Measure the badge before calculating the group's width.
 For LTR, the core placement rule is:
 
 ```text
-badge.left = icon.right - 50% of icon width
-badge.top  = icon.top   + 30% of badge height
+badge.left = image.right - badge.width / 2
+badge.top  = image.top   - badge.height / 2
 ```
 
-The badge is near the upper-right corner.
-It is not centered on that corner.
-Its left edge follows the icon.
-Its top offset follows its own measured height.
-Its width may change from `9` to `99+`.
-That makes its right edge move, not its left edge.
+The badge's center stays on the image's corner.
+When the count changes, both badge edges move around that center.
+Use the measured badge size, not a fixed offset.
+Whole-pixel rounding may shift the center by less than one pixel.
 
 But placement is only half the work.
 You must reserve space too:
 
 ```text
-group width  = max(icon width, badge left offset + badge width)
-group height = max(icon height, badge top offset + badge height)
+group.left   = min(image.left, badge.left)
+group.top    = min(image.top, badge.top)
+group.right  = max(image.right, badge.right)
+group.bottom = max(image.bottom, badge.bottom)
+
+group width  = group.right - group.left
+group height = group.bottom - group.top
 ```
 
-Here, both offsets are measured from the icon's top-left corner.
-The formulas include the full badge, even if it extends outside the icon.
+These bounds include both rectangles.
+Shift them together so the group's top-left starts at the row's padding.
+This reserves room above and beside the image.
 Start the text after the **group width**, not just the icon width.
 Include the group height when calculating the row height.
+
+### Round only the image
+
+Keep the image and badge as **siblings** in the outer parent.
+Clip only the image to its rounded outline.
+For example, an ImageView with a rounded background outline can use
+`clipToOutline` on supported outline shapes.
+Give the badge its own shape.
+Keep it later in drawing order, or above the image with elevation.
+
+Do not put both children inside the image's rounded clipping area.
+That would clip the part of the badge outside the image.
+
+With a `FrameLayout`, you need to handle overlap, measured offsets, and the
+wrapper's reserved space.
+If children draw outside a wrapper, ancestor clipping matters too.
+Setting `clipChildren=false` can allow overflow, but does not reserve space
+or enlarge touch bounds.
+Our group-bounds approach keeps the badge inside the outer row instead.
+
+ConstraintLayout can also align a badge's center with an image corner.
+It still needs the right clipping and outer-space rules.
+This is more involved than adding a top-right gravity attribute.
+It is not impossible with standard layouts.
 
 The measurement order becomes:
 
