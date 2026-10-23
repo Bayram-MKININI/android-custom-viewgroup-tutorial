@@ -83,18 +83,75 @@ It needs more width.
 That leaves less width for the subject.
 But it must not reduce the body's width.
 
-These are the rules we will write directly in Kotlin.
+So far, standard layouts can handle the design.
+Now imagine one more request.
+
+### "Can we add a badge on the icon?"
+
+Put a small count badge near the icon's upper-right corner, like Yumi's menu badges.
+Keep the subject and body where they are.
+
+Your horizontal layout puts children beside each other.
+It does not overlap them.
+You could put the icon and badge inside a `FrameLayout`:
+
+```text
+Horizontal layout
+    -> FrameLayout
+        -> Icon
+        -> Badge
+    -> Vertical layout
+        -> Horizontal header
+            -> Subject
+            -> Time
+        -> Body
+```
+
+That can place a badge **inside** the icon's corner.
+But Yumi's notification badge has a more precise rule:
+
+> Start the badge halfway across the icon.
+> Put its top below the icon's top by 30% of the badge's own height.
+
+These rules come from
+[Yumi's HomeMenuView](https://github.com/Bayram-MKININI/Yumi/blob/5b4032fbfc7bdf707d5f597b137aeff3db819515/app/src/main/java/net/noliaware/yumi/feature_categories/presentation/views/HomeMenuView.kt).
+The notification badge starts at 50% of the icon width.
+The mail badge starts at 60%.
+Both use the badge's measured height for the top offset.
+
+An ordinary top-right alignment is not exactly the same rule.
+It keeps the badge's right edge fixed.
+Yumi keeps the badge's **left edge** tied to a point inside the icon.
+When `9` changes to `99+`, the badge grows to the right.
+
+![Yumi-style notification badge: its left edge starts halfway across the icon, and its top is offset by 30% of its own height. A larger count grows to the right.](docs/images/message-badge.svg)
+
+Now ask:
+
+- How wide is the badge after measuring its text?
+- How much space does it need outside the icon?
+- Will it overlap the subject or be clipped by a parent?
+- Should the text start after the icon, or after the whole icon-and-badge group?
+
+Adding a wrapper did not answer those questions.
+You need a clear rule for the size of the group.
+
+This is a **possible extension to the message row**.
+The badge rule is real, but it comes from Yumi's menu, not its message row.
+The runnable sample below keeps the real row's four children.
+We return to this badge extension after building that row.
 
 ### Do we need a custom ViewGroup?
 
 Not strictly.
-**ConstraintLayout can also express this design.**
+**ConstraintLayout can also express these relationships.**
 It can constrain the subject before the time and use a bottom barrier for the body.
+It can also help position an overlapping badge.
 
-This example does not prove that standard layouts are unable to do the job.
-It shows another way to express a real app layout.
-The benefit is direct size calculations in one parent.
-Whether that is clearer is a choice for your project.
+The point is not to make standard layouts look impossible.
+The point is to see where the rules live as the design grows.
+You can use constraints, wrappers, or custom measurement code.
+Here, we choose one parent that calculates sizes and positions directly.
 
 ## 3. Give each method one job
 
@@ -472,6 +529,69 @@ Run the tests and Android lint:
 
 The [tests](app/src/test/java/dev/bayram/viewgrouptutorial/MessageRowViewTest.kt)
 check spacing, bounds, RTL, a wider timestamp, and either header text being taller.
+
+## 9. Return to the badge request
+
+You now know where the extra rule belongs.
+The badge would be a fifth child.
+This section explains the extension; it is **not included in the runnable sample**.
+
+First, choose the behavior:
+
+> Use the upper-corner position from Yumi's notification menu badge.
+> Keep the whole badge inside the row.
+> Start the text after the whole icon-and-badge group.
+
+Yumi's original formula uses physical right.
+For this message-row extension, we can mirror it in RTL.
+That mirroring is an added behavior, not part of the original formula.
+
+Measure the badge before calculating the group's width.
+For LTR, the core placement rule is:
+
+```text
+badge.left = icon.right - 50% of icon width
+badge.top  = icon.top   + 30% of badge height
+```
+
+The badge is near the upper-right corner.
+It is not centered on that corner.
+Its left edge follows the icon.
+Its top offset follows its own measured height.
+Its width may change from `9` to `99+`.
+That makes its right edge move, not its left edge.
+
+But placement is only half the work.
+You must reserve space too:
+
+```text
+group width  = max(icon width, badge left offset + badge width)
+group height = max(icon height, badge top offset + badge height)
+```
+
+Here, both offsets are measured from the icon's top-left corner.
+The formulas include the full badge, even if it extends outside the icon.
+Start the text after the **group width**, not just the icon width.
+Include the group height when calculating the row height.
+
+The measurement order becomes:
+
+```text
+measure icon and badge
+    -> calculate their group bounds
+        -> find the remaining text area
+            -> measure time, subject, and body
+                -> place all five children
+```
+
+If the badge is absent, the group is just the icon.
+If its text changes, the group may need a new size.
+A drawing translation alone does not update that reserved space.
+
+Now the new request is a set of size and position rules.
+You can implement those rules in a custom parent.
+Or you can use standard layouts with the same care about bounds.
+Neither choice removes the need to decide how the badge affects the text.
 
 ## A short note about performance
 
