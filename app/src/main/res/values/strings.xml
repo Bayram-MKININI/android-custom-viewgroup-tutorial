@@ -9,4 +9,13 @@
     <string name="article_description">Discover small streets, local shops, and places to stop along the way.</string>
     <dimen name="article_column_gap">16dp</dimen>
     <dimen name="article_text_gap">8dp</dimen>
+    <string name="message_subject">Your voucher is ready</string>
+    <string name="message_time">17:17</string>
+    <string name="message_body">You can now collect your voucher. Open the message to see where and when it is available.</string>
+    <string name="message_priority">Important message</string>
+    <dimen name="message_padding">16dp</dimen>
+    <dimen name="message_icon_size">24dp</dimen>
+    <dimen name="message_icon_gap">8dp</dimen>
+    <dimen name="message_header_gap">12dp</dimen>
+    <dimen name="message_body_gap">8dp</dimen>
 </resources>

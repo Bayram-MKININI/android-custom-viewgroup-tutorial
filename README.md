@@ -1,33 +1,30 @@
-# Let the text choose the layout
+# Build a real message row with a custom ViewGroup
 
-You are building a news preview.
-It has a photo, a title, and a description.
-A short title looks good beside the photo.
-A long title becomes hard to read in that narrow column.
+A message has a priority icon, a subject, a time, and a body.
+The subject must leave room for the time.
+The body can use more width.
+Its position depends on the height of both header texts.
 
-What if the preview could switch layouts based on the actual text?
-
-This guide builds a custom Android `ViewGroup` for that rule.
+This is a real layout from [Yumi](https://github.com/Bayram-MKININI/Yumi).
+We will use its rules to learn custom measurement and placement.
 You need basic Kotlin and Android XML knowledge.
-The idea comes from the custom layouts in [Yumi](https://github.com/Bayram-MKININI/Yumi).
 
 ## Start here
 
-Clone this project.
+Clone the project.
 All examples use its package and resources.
-You do not need to create another Android project.
 
-Use Android Studio, JDK 17, and Android SDK 36.
+Use Android Studio, JDK 17, and Android SDK 36:
 
 ```sh
 git clone https://github.com/Bayram-MKININI/android-custom-viewgroup-tutorial.git
 cd android-custom-viewgroup-tutorial
 ```
 
-Open it in Android Studio to set the SDK location.
+Open the project in Android Studio to set the SDK location.
 Or set `ANDROID_HOME` to your SDK.
 
-The finished preview is already the default screen:
+The message row is the default screen:
 
 ```sh
 ./gradlew :app:assembleDebug
@@ -38,113 +35,112 @@ The install command needs a device or emulator running API 24 or newer.
 Open **Custom ViewGroup Tutorial**.
 The first build needs internet access.
 
-## 1. Start with a normal article row
+## 1. Look at the real app
 
-The photo sits beside the title and description:
+Read Yumi's original files:
 
-```text
-+---------+    +------------------------+
-|         |    | Title                  |
-|  Photo  |    +------------------------+
-|         |    | Description            |
-+---------+    +------------------------+
-```
+- [MessageItemView.kt](https://github.com/Bayram-MKININI/Yumi/blob/5b4032fbfc7bdf707d5f597b137aeff3db819515/app/src/main/java/net/noliaware/yumi/feature_message/presentation/views/MessageItemView.kt)
+- [message_item_layout.xml](https://github.com/Bayram-MKININI/Yumi/blob/5b4032fbfc7bdf707d5f597b137aeff3db819515/app/src/main/res/layout/message_item_layout.xml)
 
-A horizontal `LinearLayout` can hold the photo and a vertical text column.
-`ConstraintLayout` can also place all three children in one parent.
-Use those layouts when this is all you need.
+The original parent measures and places four children.
+It measures the icon and time before the subject.
+It gives the body more width than the subject.
+Then it puts the body below the taller header text.
+The body preview has a five-line limit.
 
-Our row has simple spacing rules:
+Our sample keeps those rules.
+It uses new teaching code, simpler styling, and different spacing.
+It also adds RTL support and explicit size limits.
+It does not copy the app's implementation or reproduce its exact appearance.
 
-- The photo is square. Its side is 30% of the content width.
-- The photo and title share the same top edge.
-- The title and description have the same width.
-- There is 16dp between the columns and 8dp between the texts.
+![Message row with priority icon, subject, timestamp, and body. The body starts below both header texts and extends below the timestamp.](docs/images/message-row.svg)
 
-**Content width** is the parent width minus its left and right padding.
-The description may extend below the photo.
+## 2. Start with a simple arrangement
 
-None of this alone requires a custom layout.
-
-## 2. A longer title changes the problem
-
-Now try a long headline.
-It may need four or five lines beside the photo.
-This creates a tall, narrow block of text.
-
-The design team asks for a clear rule:
-
-> Try the title beside the photo.
-> If it needs more than two lines, put the photo above both texts.
-> Give the texts the full content width.
-
-![The same news preview in a row and a stacked arrangement, chosen from the title's trial line count.](docs/images/article-preview.svg)
-
-In the stacked version, the photo becomes a full-width 16:9 image.
-Keep the 16dp gap below it.
-Keep the 8dp gap between the texts.
-Do not cut or hide title lines in either version.
-
-This is a real readability rule.
-It reacts to the title, translation, font size, and available width.
-
-## 3. A screen-width breakpoint is not enough
-
-You could switch layouts below a fixed screen width.
-But two titles can need different layouts at the **same width**.
-A larger font can change the result too.
-
-You need to know how the title actually wraps.
-Counting characters is not enough.
-Different letters and words take different space.
-
-Standard `LinearLayout` and `ConstraintLayout` attributes cannot say:
+You could put the icon beside a text column.
+Inside that column, put a header row above the body:
 
 ```text
-Choose the arrangement from this TextView's measured line count.
+Horizontal layout
+    -> Icon
+    -> Vertical layout
+        -> Horizontal header
+            -> Subject
+            -> Time
+        -> Body
 ```
 
-Adding nested layouts does not add that decision.
-You need code.
+This is a valid solution.
+Nested layouts are not wrong.
 
-**This is not impossible with standard layouts plus code.**
-You could measure text and switch between two standard layouts.
-Here, a custom parent keeps the decision and placement in one place.
-It also avoids waiting for a displayed row before changing it.
+But the sizes are not all independent.
+The time must keep its space.
+The subject must wrap before it reaches the time.
+The body must start below both texts, not only below the subject.
 
-## 4. Measure a candidate before choosing
+Try a longer timestamp, such as "Yesterday 17:17".
+It needs more width.
+That leaves less width for the subject.
+But it must not reduce the body's width.
 
-A `ViewGroup` is a View that contains child Views.
-Our parent has three direct children:
+These are the rules we will write directly in Kotlin.
+
+### Do we need a custom ViewGroup?
+
+Not strictly.
+**ConstraintLayout can also express this design.**
+It can constrain the subject before the time and use a bottom barrier for the body.
+
+This example does not prove that standard layouts are unable to do the job.
+It shows another way to express a real app layout.
+The benefit is direct size calculations in one parent.
+Whether that is clearer is a choice for your project.
+
+## 3. Give each method one job
+
+A `ViewGroup` is a View that contains other Views.
+It is the **parent**.
+The Views inside it are its **children**.
+
+Our parent has four direct children:
 
 ```text
-ArticlePreviewView
-    -> ImageView
-    -> Title TextView
-    -> Description TextView
+MessageRowView
+    -> Priority ImageView
+    -> Subject TextView
+    -> Time TextView
+    -> Body TextView
 ```
 
-Its measurement plan is:
+Android separates three jobs:
 
-```text
-Calculate the row's text width
-    -> measure the title at that width
-        -> title needs at most 2 lines: keep the row
-        -> title needs more than 2 lines: choose the stack
-            -> measure the title again at full width
+| Method | Job |
+| --- | --- |
+| `onMeasure()` | Measure children and report the parent's size |
+| `onLayout()` | Assign each child a rectangle |
+| `onDraw()` | Paint this View's own custom content |
+
+We only need the first two.
+The children already know how to draw text and images.
+Android draws them through `dispatchDraw()`.
+Our parent has no extra content to paint in `onDraw()`.
+
+![The three jobs: measure sizes, assign rectangles, and draw content.](docs/images/viewgroup-phases.svg)
+
+## 4. Measure the time before the subject
+
+First, find the width available after padding and the icon:
+
+```kotlin
+val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+val textAreaWidth = contentWidth - iconSize - iconGap
 ```
 
-The decision always uses the **trial row width**.
-Do not check the full-width title and switch back.
-That could make the decision alternate between layouts.
+All measurement code uses pixels.
+The resource values, such as `16dp`, are converted by Android.
+The width comes from the parent, not the full screen.
 
-## 5. Put the size decision in onMeasure
-
-`onMeasure()` measures the children and reports the parent's size.
-It does not place or draw them.
-
-Android provides a `MeasureSpec` for each direction.
-A spec contains a size and a rule:
+Android describes each size with a `MeasureSpec`:
 
 | Mode | Meaning |
 | --- | --- |
@@ -152,124 +148,123 @@ A spec contains a size and a rule:
 | `AT_MOST` | Use up to this size |
 | `UNSPECIFIED` | No limit for this width or height |
 
-Our sample receives an exact width.
-A surrounding `ScrollView` lets it grow in height.
-
-First, calculate the candidate row width:
+The icon gets an exact size.
+The timestamp gets up to the full text area:
 
 ```kotlin
-val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-val thumbnailSide = (contentWidth * 0.3).toInt()
-val rowTextWidth = contentWidth - thumbnailSide - columnGap
-```
-
-For example, with 400px of content width and a 16px column gap:
-
-```text
-thumbnail side = 120px
-text width     = 400 - 120 - 16 = 264px
-```
-
-The actual column gap is a 16dp resource.
-Android converts it to pixels using device density.
-All our size calculations use pixels.
-
-Now measure the title at that text width:
-
-```kotlin
-val textHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-title.measure(
-    MeasureSpec.makeMeasureSpec(rowTextWidth, MeasureSpec.EXACTLY),
-    textHeightSpec
+val unlimitedHeight = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+val iconSpec = MeasureSpec.makeMeasureSpec(iconSize, MeasureSpec.EXACTLY)
+icon.measure(iconSpec, iconSpec)
+time.measure(
+    MeasureSpec.makeMeasureSpec(textAreaWidth, MeasureSpec.AT_MOST),
+    unlimitedHeight
 )
-arrangement = if (title.lineCount <= 2) Arrangement.ROW else Arrangement.STACKED
 ```
 
-After `measure()`, `TextView` knows its line count at that width.
-There is no `maxLines` or ellipsis here.
-We need the real number of lines, not a count already cut to two.
+Now we know `time.measuredWidth`.
+Remove it, plus the header gap, from the subject's width limit:
 
-For the row, keep the measured title and square thumbnail.
-For the stack, remeasure the title at the full content width.
-Use that same width for the description.
-The complete code below handles both cases.
-
-The parent height follows the chosen arrangement:
-
-```text
-ROW:
-    max(image height, title height + 8dp + description height)
-
-STACKED:
-    image height + 16dp + title height + 8dp + description height
+```kotlin
+val subjectWidth = textAreaWidth - time.measuredWidth - headerGap
+subject.measure(
+    MeasureSpec.makeMeasureSpec(subjectWidth, MeasureSpec.AT_MOST),
+    unlimitedHeight
+)
 ```
 
-Add top and bottom padding to either result.
-Use `resolveSizeAndState()` and `setMeasuredDimension()` to report the size.
-
-The stacked case measures the title twice.
-That is deliberate: once to choose the layout, then once at its final width.
-Custom layouts are not always single-pass layouts.
-
-## 6. Place the chosen arrangement in onLayout
-
-Now the child sizes are known.
-`onLayout()` assigns their rectangles.
-It uses the arrangement already chosen during measurement.
-
-For the row:
-
-```text
-Image and title start at the top padding.
-Text starts after the image and column gap.
-Description starts below the title and text gap.
-```
-
-For the stack:
-
-```text
-Image starts at the top padding.
-Title starts below the image and column gap.
-Description starts below the title and text gap.
-```
-
-Each child receives `layout(left, top, right, bottom)`.
 For example:
 
+```text
+text area width      300px
+timestamp width       50px
+header gap            12px
+--------------------------
+subject width limit  238px
+```
+
+A wider time means a smaller subject limit.
+The sample reports an error if the timestamp leaves no subject space.
+A production design should define a fallback for that case.
+
+## 5. Give the body its own width
+
+The timestamp only reserves space on the header row.
+Do not remove its width when measuring the body:
+
 ```kotlin
-title.layout(
-    textLeft,
-    titleTop,
-    textLeft + title.measuredWidth,
-    titleTop + title.measuredHeight
+body.measure(
+    MeasureSpec.makeMeasureSpec(textAreaWidth, MeasureSpec.AT_MOST),
+    unlimitedHeight
 )
 ```
 
-These are edges, not x, y, width, height.
-Coordinates are inside the parent, not the screen.
-The row also mirrors for right-to-left layouts.
+Now calculate the height:
 
-### Do we need onDraw?
+```kotlin
+val headerHeight = maxOf(subject.measuredHeight, time.measuredHeight)
+val contentHeight = maxOf(
+    icon.measuredHeight,
+    headerHeight + bodyGap + body.measuredHeight
+)
+```
 
-No. `onDraw()` paints a View's own custom content.
-It does not measure or place children.
-The two `TextView`s draw their text.
-The `ImageView` draws its image.
-Android draws the children through `dispatchDraw()`.
+Why use `maxOf()`?
+The subject may wrap onto several lines.
+The time could also be taller, for example with a different text size.
+The body must start below whichever is taller.
+The row must also contain the icon.
 
-![The three jobs: measure sizes, assign rectangles, and draw content.](docs/images/viewgroup-phases.svg)
+Add top and bottom padding to get the parent's desired height.
+Use `resolveSizeAndState()` and `setMeasuredDimension()` to report it.
+Do not pass `MeasureSpec` values to `setMeasuredDimension()`.
 
-Use `requestLayout()` when your own size or position rules change.
-Use `invalidate()` when only your custom drawing changes.
-Android does not have to run all three methods on every frame.
+## 6. Place the children in onLayout
+
+Measurement gives sizes, not positions.
+For left-to-right reading, place the children like this:
+
+```text
+Icon:    at the start padding
+Subject: after the icon and icon gap
+Time:    against the end padding
+Body:    aligned with the subject, below both header texts
+```
+
+The key body rule is:
+
+```kotlin
+val bodyTop = maxOf(subject.bottom, time.bottom) + bodyGap
+```
+
+Do not use `subject.bottom` alone.
+That could overlap a taller timestamp.
+
+Each child receives `layout(left, top, right, bottom)`:
+
+```kotlin
+body.layout(
+    bodyLeft,
+    bodyTop,
+    bodyLeft + body.measuredWidth,
+    bodyTop + body.measuredHeight
+)
+```
+
+These arguments are edges, not x, y, width, height.
+Coordinates are inside this parent, not the screen.
+The full class mirrors placement for right-to-left layouts.
 
 ## 7. The complete example
 
+The row sits inside a `ScrollView`.
+It requires an exact width and no height limit.
+All four children must stay visible.
+Child margins are not supported.
+The parent owns the spacing.
+
 ### XML
 
-The [layout file](app/src/main/res/layout/article_preview_example.xml) contains
-the three children inside our parent.
-That parent sits inside a `ScrollView`.
+Save this as `app/src/main/res/layout/message_row_example.xml`:
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -278,56 +273,60 @@ That parent sits inside a `ScrollView`.
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <dev.bayram.viewgrouptutorial.ArticlePreviewView
-        android:id="@+id/article_preview"
+    <dev.bayram.viewgrouptutorial.MessageRowView
+        android:id="@+id/message_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="@dimen/content_padding">
+        android:padding="@dimen/message_padding">
 
         <ImageView
-            android:id="@+id/article_image"
+            android:id="@+id/message_icon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:importantForAccessibility="no"
-            android:scaleType="centerCrop"
-            android:src="@drawable/example_landscape" />
+            android:contentDescription="@string/message_priority"
+            android:src="@drawable/message_priority" />
 
         <TextView
-            android:id="@+id/article_title"
+            android:id="@+id/message_subject"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/article_title"
+            android:text="@string/message_subject"
             android:textColor="?android:attr/textColorPrimary"
-            android:textSize="22sp"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/article_description"
+            android:id="@+id/message_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/article_description"
+            android:text="@string/message_time"
             android:textColor="?android:attr/textColorSecondary"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/message_body"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="5"
+            android:text="@string/message_body"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="16sp" />
-    </dev.bayram.viewgrouptutorial.ArticlePreviewView>
+    </dev.bayram.viewgrouptutorial.MessageRowView>
 </ScrollView>
 ```
 
-Our parent supplies the final child widths.
-Those calculations replace the XML `wrap_content` widths here.
-`centerCrop` fills the image box and crops extra picture area.
-It does not set the box size.
+The project includes the [strings and dimensions](app/src/main/res/values/strings.xml)
+and [priority icon](app/src/main/res/drawable/message_priority.xml).
+The icon has a translated description because it communicates priority.
+The body is a five-line preview, as in Yumi.
+This sample does not implement opening the full message.
 
-The photo is decorative in this example.
-For a photo that adds useful information, give it a translated
-`contentDescription` instead of hiding it from screen readers.
-
-The project includes the [text and spacing resources](app/src/main/res/values/strings.xml)
-and [image](app/src/main/res/drawable/example_landscape.xml).
+The custom parent supplies child size rules itself.
+Here, XML `wrap_content` does not choose the icon size or available text widths.
 
 ### Kotlin
 
-This is the complete [ArticlePreviewView.kt](app/src/main/java/dev/bayram/viewgrouptutorial/ArticlePreviewView.kt).
-`onFinishInflate()` finds the children after Android creates them from XML.
+This is the complete `MessageRowView.kt`:
 
 ```kotlin
 package dev.bayram.viewgrouptutorial
@@ -339,103 +338,81 @@ import android.widget.ImageView
 import android.widget.TextView
 
 /**
- * Stacks the preview when the title needs more than two lines beside the image.
- * Requires exact width, unbounded height, and three visible XML children without margins.
+ * Reserves timestamp space before measuring the subject, as in Yumi's message row.
+ * Requires exact width, unbounded height, and four visible XML children without margins.
  */
-class ArticlePreviewView @JvmOverloads constructor(
+class MessageRowView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : ViewGroup(context, attrs, defStyleAttr) {
 
-    private lateinit var image: ImageView
-    private lateinit var title: TextView
-    private lateinit var description: TextView
-    private val columnGap = resources.getDimensionPixelSize(R.dimen.article_column_gap)
-    private val textGap = resources.getDimensionPixelSize(R.dimen.article_text_gap)
-    private var arrangement = Arrangement.ROW
-
-    private enum class Arrangement { ROW, STACKED }
+    private lateinit var icon: ImageView
+    private lateinit var subject: TextView
+    private lateinit var time: TextView
+    private lateinit var body: TextView
+    private val iconSize = resources.getDimensionPixelSize(R.dimen.message_icon_size)
+    private val iconGap = resources.getDimensionPixelSize(R.dimen.message_icon_gap)
+    private val headerGap = resources.getDimensionPixelSize(R.dimen.message_header_gap)
+    private val bodyGap = resources.getDimensionPixelSize(R.dimen.message_body_gap)
 
     override fun onFinishInflate() {
         super.onFinishInflate()
-        require(childCount == 3) { "ArticlePreviewView requires exactly three children" }
-        image = requireNotNull(findViewById<ImageView>(R.id.article_image))
-        title = requireNotNull(findViewById<TextView>(R.id.article_title))
-        description = requireNotNull(findViewById<TextView>(R.id.article_description))
-        require(image.parent === this && title.parent === this && description.parent === this) {
-            "Image, title, and description must be direct children"
+        require(childCount == 4) { "MessageRowView requires exactly four children" }
+        icon = requireNotNull(findViewById<ImageView>(R.id.message_icon))
+        subject = requireNotNull(findViewById<TextView>(R.id.message_subject))
+        time = requireNotNull(findViewById<TextView>(R.id.message_time))
+        body = requireNotNull(findViewById<TextView>(R.id.message_body))
+        require(listOf(icon, subject, time, body).all { it.parent === this }) {
+            "All four views must be direct children"
         }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         require(MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY) {
-            "ArticlePreviewView requires exact width"
+            "MessageRowView requires exact width"
         }
         require(MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
-            "ArticlePreviewView requires unbounded height; use the sample ScrollView"
+            "MessageRowView requires unbounded height; use the sample ScrollView"
         }
-        require(image.visibility == VISIBLE && title.visibility == VISIBLE && description.visibility == VISIBLE) {
-            "This example requires all three children to be visible"
+        require(listOf(icon, subject, time, body).all { it.visibility == VISIBLE }) {
+            "This example requires all four children to be visible"
         }
         val contentWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-        val thumbnailSide = (contentWidth * 0.3).toInt()
-        val rowTextWidth = contentWidth - thumbnailSide - columnGap
-        require(rowTextWidth > 0) { "Not enough width for padding, image, and column gap" }
+        val textAreaWidth = contentWidth - iconSize - iconGap
+        require(textAreaWidth > headerGap) { "Not enough width for the message row" }
 
-        val textHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        title.measure(
-            MeasureSpec.makeMeasureSpec(rowTextWidth, MeasureSpec.EXACTLY),
-            textHeightSpec
+        val unlimitedHeight = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        val iconSpec = MeasureSpec.makeMeasureSpec(iconSize, MeasureSpec.EXACTLY)
+        icon.measure(iconSpec, iconSpec)
+        time.measure(
+            MeasureSpec.makeMeasureSpec(textAreaWidth, MeasureSpec.AT_MOST),
+            unlimitedHeight
         )
-        arrangement = if (title.lineCount <= 2) Arrangement.ROW else Arrangement.STACKED
 
-        val imageWidth: Int
-        val imageHeight: Int
-        val textWidth: Int
-        when (arrangement) {
-            Arrangement.ROW -> {
-                imageWidth = thumbnailSide
-                imageHeight = thumbnailSide
-                textWidth = rowTextWidth
-            }
-            Arrangement.STACKED -> {
-                imageWidth = contentWidth
-                imageHeight = (contentWidth * 9.0 / 16).toInt()
-                textWidth = contentWidth
-                title.measure(
-                    MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY),
-                    textHeightSpec
-                )
-            }
+        val subjectWidth = textAreaWidth - time.measuredWidth - headerGap
+        require(subjectWidth > 0) { "Timestamp leaves no space for the subject" }
+        subject.measure(
+            MeasureSpec.makeMeasureSpec(subjectWidth, MeasureSpec.AT_MOST),
+            unlimitedHeight
+        )
+        body.measure(
+            MeasureSpec.makeMeasureSpec(textAreaWidth, MeasureSpec.AT_MOST),
+            unlimitedHeight
+        )
+
+        val headerHeight = maxOf(subject.measuredHeight, time.measuredHeight)
+        val contentHeight = maxOf(
+            icon.measuredHeight,
+            headerHeight + bodyGap + body.measuredHeight
+        )
+        val childState = listOf(icon, subject, time, body).fold(0) { state, child ->
+            combineMeasuredStates(state, child.measuredState)
         }
-        image.measure(
-            MeasureSpec.makeMeasureSpec(imageWidth, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(imageHeight, MeasureSpec.EXACTLY)
-        )
-        val textWidthSpec = MeasureSpec.makeMeasureSpec(textWidth, MeasureSpec.EXACTLY)
-        description.measure(textWidthSpec, textHeightSpec)
-
-        val textColumnHeight = title.measuredHeight + textGap + description.measuredHeight
-        val contentHeight = when (arrangement) {
-            Arrangement.ROW -> maxOf(imageHeight, textColumnHeight)
-            Arrangement.STACKED -> imageHeight + columnGap + textColumnHeight
-        }
-        val childState = combineMeasuredStates(
-            image.measuredState,
-            combineMeasuredStates(title.measuredState, description.measuredState)
-        )
         setMeasuredDimension(
+            resolveSizeAndState(MeasureSpec.getSize(widthMeasureSpec), widthMeasureSpec, childState),
             resolveSizeAndState(
-                MeasureSpec.getSize(widthMeasureSpec),
-                widthMeasureSpec,
-                childState
-            ),
-            resolveSizeAndState(
-                maxOf(
-                    suggestedMinimumHeight,
-                    paddingTop + contentHeight + paddingBottom
-                ),
+                maxOf(suggestedMinimumHeight, paddingTop + contentHeight + paddingBottom),
                 heightMeasureSpec,
                 childState shl MEASURED_HEIGHT_STATE_SHIFT
             )
@@ -444,67 +421,48 @@ class ArticlePreviewView @JvmOverloads constructor(
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
-        val imageLeft = if (rtl) right - left - paddingRight - image.measuredWidth else paddingLeft
-        val textLeft = when (arrangement) {
-            Arrangement.ROW -> if (rtl) paddingLeft else imageLeft + image.measuredWidth + columnGap
-            Arrangement.STACKED -> paddingLeft
-        }
-        val titleTop = when (arrangement) {
-            Arrangement.ROW -> paddingTop
-            Arrangement.STACKED -> paddingTop + image.measuredHeight + columnGap
-        }
+        val contentRight = right - left - paddingRight
+        val textStart = if (rtl) contentRight - icon.measuredWidth - iconGap
+            else paddingLeft + icon.measuredWidth + iconGap
+        val iconLeft = if (rtl) contentRight - icon.measuredWidth else paddingLeft
+        val subjectLeft = if (rtl) textStart - subject.measuredWidth else textStart
+        val timeLeft = if (rtl) paddingLeft else contentRight - time.measuredWidth
+        val bodyLeft = if (rtl) textStart - body.measuredWidth else textStart
 
-        image.layout(
-            imageLeft,
-            paddingTop,
-            imageLeft + image.measuredWidth,
-            paddingTop + image.measuredHeight
+        icon.layout(iconLeft, paddingTop, iconLeft + icon.measuredWidth, paddingTop + icon.measuredHeight)
+        subject.layout(
+            subjectLeft, paddingTop,
+            subjectLeft + subject.measuredWidth, paddingTop + subject.measuredHeight
         )
-        title.layout(
-            textLeft,
-            titleTop,
-            textLeft + title.measuredWidth,
-            titleTop + title.measuredHeight
-        )
-        val descriptionTop = title.bottom + textGap
-        description.layout(
-            textLeft,
-            descriptionTop,
-            textLeft + description.measuredWidth,
-            descriptionTop + description.measuredHeight
-        )
+        time.layout(timeLeft, paddingTop, timeLeft + time.measuredWidth, paddingTop + time.measuredHeight)
+        val bodyTop = maxOf(subject.bottom, time.bottom) + bodyGap
+        body.layout(bodyLeft, bodyTop, bodyLeft + body.measuredWidth, bodyTop + body.measuredHeight)
     }
 }
 ```
 
-`arrangement` stores the measurement decision for `onLayout()`.
-Every measurement starts by trying the row again.
-This lets the preview switch back after the title becomes shorter.
+`onFinishInflate()` finds the children after Android creates them from XML.
+`require()` explains unsupported uses.
+`combineMeasuredStates()` collects child size warnings.
+`resolveSizeAndState()` passes them on under the parent's size rules.
+Height warning bits need `MEASURED_HEIGHT_STATE_SHIFT`.
 
-`combineMeasuredStates()` collects child size-warning flags.
-`resolveSizeAndState()` keeps those flags and applies parent limits.
-The height flags need `MEASURED_HEIGHT_STATE_SHIFT`.
-These are Android details around the main layout rule.
+These are Android details around a short idea:
+**reserve time space, measure the subject, place the body below both**.
 
-**Scope of this sample:** exact width, unbounded height, three visible children,
-and no child margins.
-The `require()` checks report unsupported uses.
-Keep the `ScrollView` setup shown above, without `fillViewport`.
-This is a teaching component, not a general layout container.
+## 8. Try changing the content
 
-## 8. Try the rule
+Edit the [string resources](app/src/main/res/values/strings.xml).
 
-Change `article_title` in [strings.xml](app/src/main/res/values/strings.xml).
-Try `"Walk"` first, then a long headline.
-Build and run again.
+First, make the subject longer.
+It should wrap without covering the time.
+Then change the time from `"17:17"` to `"Yesterday 17:17"`.
+The subject should get less room.
+The body should keep its width limit.
 
-At the same width, the short title should keep the row.
-A title needing more than two lines **in the trial row** should choose the stack.
-It may use fewer lines after it gets the full width.
-That does not change the decision for that measurement.
-
-Also try a larger font, a narrow window, and right-to-left layout.
-The layout should respond to actual text measurement, not just window width.
+Try a larger time text size too.
+The body must stay below both header texts.
+Also check large fonts, narrow windows, RTL, and screen-reader order.
 
 Run the tests and Android lint:
 
@@ -512,27 +470,23 @@ Run the tests and Android lint:
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 ```
 
-The [tests](app/src/test/java/dev/bayram/viewgrouptutorial/ArticlePreviewViewTest.kt)
-check the exact two-line boundary, row and stacked geometry, RTL, width changes,
-and switching in both directions after text changes.
-They use native text rendering in Robolectric so wrapping is measured.
-Also check readability and accessibility on a device.
+The [tests](app/src/test/java/dev/bayram/viewgrouptutorial/MessageRowViewTest.kt)
+check spacing, bounds, RTL, a wider timestamp, and either header text being taller.
 
 ## A short note about performance
 
 Nested layouts can add measurement and placement work.
 But Android does not always measure the whole tree again.
-Our custom parent removes the need for a nested text column.
-It also measures the title twice when choosing the stack.
+Our sample keeps four children under one parent.
+ConstraintLayout can do that too.
 
-This example teaches a content-based layout decision.
-It does not prove a speedup.
-Measure equivalent implementations before making that claim.
+This tutorial has no performance comparison.
+It teaches direct control, not a proven speedup.
 
 ## References
 
-- [Preview source](app/src/main/java/dev/bayram/viewgrouptutorial/ArticlePreviewView.kt)
-- [Preview XML](app/src/main/res/layout/article_preview_example.xml)
+- [Original Yumi MessageItemView](https://github.com/Bayram-MKININI/Yumi/blob/5b4032fbfc7bdf707d5f597b137aeff3db819515/app/src/main/java/net/noliaware/yumi/feature_message/presentation/views/MessageItemView.kt)
+- [Teaching implementation](app/src/main/java/dev/bayram/viewgrouptutorial/MessageRowView.kt)
+- [Teaching XML](app/src/main/res/layout/message_row_example.xml)
 - [Custom Android components](https://developer.android.com/develop/ui/views/layout/custom-views/custom-components)
 - [MeasureSpec](https://developer.android.com/reference/android/view/View.MeasureSpec)
-- [Macrobenchmark](https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview)
