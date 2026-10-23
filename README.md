@@ -1,139 +1,95 @@
 # XML for content. Kotlin for size and position.
 
-A simple guide to custom Android `ViewGroup`s, inspired by
-[Yumi](https://github.com/Bayram-MKININI/Yumi).
+You need an image beside a short text.
+Then the design adds a rule: the image size must follow the text width.
+How do you build that?
 
+This guide follows one example from a standard layout to a custom `ViewGroup`.
 You need basic Kotlin and Android XML knowledge.
+The idea comes from the layouts in [Yumi](https://github.com/Bayram-MKININI/Yumi).
 
-A `ViewGroup` is a View that contains other Views.
-We call it the **parent**. The Views inside it are its **children**.
+## 1. Start with an image and text
 
-## 1. You start with a simple screen
+The first design is simple:
 
-You open a new design.
-There is a title.
-There is a summary below it.
+```text
++---------+    +----------------------+
+|  Image  |    | Some text            |
++---------+    +----------------------+
+```
 
-You know how to build this.
-
-![Two text boxes inside a parent, showing padding and the gap between them.](docs/images/headline-layout.svg)
-
-A vertical `LinearLayout` is enough:
+You choose a horizontal `LinearLayout`.
+The image has a fixed size.
+The text uses the space that remains.
 
 ```xml
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
     android:padding="24dp">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/headline" />
+    <ImageView
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:importantForAccessibility="no"
+        android:scaleType="centerInside"
+        android:src="@drawable/example_landscape" />
 
     <TextView
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_weight="1"
+        android:layout_marginLeft="16dp"
         android:text="@string/summary" />
 </LinearLayout>
 ```
 
-The screen looks right.
-The code is short.
-You move on.
+This works.
+If the design stays like this, keep the standard layout.
 
-## 2. Then the design changes
+## 2. The image must now follow the text
 
-Now you need an image beside the text.
+The design adds three rules:
 
-"Easy," you think.
-"I can put them in a horizontal `LinearLayout`."
+1. Keep the image square.
+2. Make each image side **50% of the measured text width**.
+3. Make the gap **30% of that same width**.
 
-That solves the position.
-But then you read the size rules:
+Keep both children centered vertically.
+Long text can use several lines.
+Short text should use less space.
 
-> Make the image square.
-> Each side must be **50% of the measured text width**.
-> The gap must be **30% of that same width**.
-> Center the image and text vertically.
+![A 100px square image, a 60px gap, and a 200px text box. All percentages use the measured text width.](docs/images/image-text-ratios.svg)
 
-The text can change too.
-Long text must use several lines.
-Short text must use less space.
+Now the fixed `80dp` image size is wrong.
+You cannot choose the size before you know the text width.
 
-![A 100px square image, a 60px gap, and a 200px text box, centered vertically.](docs/images/image-text-ratios.svg)
+Could weights solve it?
+Weights share the space offered by the parent.
+But our rule depends on the text's **actual measured width**.
+Short text may use less space than it is offered.
 
-You try a fixed image size.
-It looks right with one text.
-But the image no longer follows the text width.
+`LinearLayout` XML cannot describe this exact rule.
 
-You consider layout weights.
-They can share the available space.
-But that is not the rule you need.
-The image must follow the text's **actual measured width**.
-Short text may not use all the available space.
+Before writing a custom layout, also consider `ConstraintLayout`.
+Its ratios, guidelines, and barriers solve many problems.
+But it has no general XML expression for any calculation using another child's
+measured size.
 
-Your horizontal layout can place the children.
-Its XML cannot describe this exact size formula.
+Adding wrappers does not add that calculation either.
+You need code somewhere.
+Here, we will put the rule in the parent itself.
 
-What about `ConstraintLayout`?
-It can solve many problems with ratios, guidelines, and barriers.
-Check those tools first.
-But XML does not let you write any formula using another child's measured size.
+## 3. Give one parent the rule
 
-You can describe the design in one sentence.
-But you cannot give that sentence directly to this layout.
+A `ViewGroup` is a View that contains other Views.
+It is the **parent**.
+The Views inside it are its **children**.
 
-## 3. You add another layout. Does that help?
-
-You may try a wrapper around the image.
-Then another around the text.
-As more rules arrive, the structure can grow:
-
-```text
-Outer container
-    -> vertical container
-        -> horizontal container
-            -> image wrapper
-                -> image
-            -> text wrapper
-                -> text
-```
-
-Layouts inside layouts are called **nested layouts**.
-They are useful when you need to combine their behavior.
-But look at our problem again:
-
-> Where do we calculate 50% of the measured text width?
-
-Another wrapper does not answer that question.
-**More layers do not solve the formula by themselves.**
-You may still need code.
-
-Each layout must measure and place its children.
-When a child's size changes, its parents may need to update too.
-Other children may also need new sizes or positions.
-Some layouts measure a child more than once.
-
-More layers can mean more work.
-This can hurt performance when the screen changes often.
-
-But Android does **not always measure every View again**.
-It can reuse earlier measurements.
-A color change may only need drawing.
-A deep layout is not always slow.
-
-So stop adding wrappers for a moment.
-What if one parent knew the rule?
-
-It could measure the text first.
-Then it could calculate the image size and the gap.
-Finally, it could place both children.
-
-The structure would be:
+Our parent will contain only two children:
 
 ```text
 ImageTextView
@@ -141,210 +97,89 @@ ImageTextView
     -> TextView
 ```
 
-That parent is our custom `ViewGroup`.
-We do not need to build a text renderer.
-We do not need to build an image renderer.
-The children are still normal Android Views.
+The children still draw normal Android text and images.
+Our parent only controls their sizes and positions.
 
-We only need to answer two questions:
+The plan is:
 
-1. How big should each child be?
-2. Where should each child go?
-
-## 4. Give each method one job
-
-Before writing the formula, you need to know where it belongs.
-Android separates size, position, and drawing.
-
-![Measurement determines sizes, layout assigns rectangles, and drawing paints the content.](docs/images/viewgroup-phases.svg)
-
-### onMeasure: how big?
-
-In `onMeasure()`, we measure the children.
-Then we report the parent's own size.
-
-```kotlin
-child.measure(childWidthSpec, childHeightSpec)
-val width = child.measuredWidth
-val height = child.measuredHeight
+```text
+Find the available width
+    -> measure the text within a limit
+        -> calculate the image size and gap
+            -> place both children
 ```
 
-We must calculate `childWidthSpec` and `childHeightSpec` first.
-A **MeasureSpec** is a size with a rule:
+There is one problem to solve first.
+How much width should we offer the text?
+
+## 4. Leave room for the image and gap
+
+Do not give the text the full row width.
+That would leave no room for the image and gap.
+
+Let `T` be the measured text width:
+
+```text
+image width = 0.5T
+gap         = 0.3T
+text width  =    T
+-----------------
+row width   = 1.8T
+```
+
+So the text can use at most:
+
+```text
+available width / 1.8
+```
+
+**Available width means parent width minus left and right padding.**
+It is not the full screen width.
+
+For example, say the available width is 360 pixels:
+
+| Text measures | Image side | Gap | Row uses |
+| --- | --- | --- | --- |
+| 200px | 100px | 60px | 360px |
+| 100px | 50px | 30px | 180px |
+
+The second row is important.
+Short text can be narrower than its limit.
+The image and gap then become smaller too.
+
+We use the width of the **TextView box**.
+We do not measure the width of each visible letter.
+
+## 5. Measure the children in onMeasure
+
+This calculation belongs in `onMeasure()`.
+This method measures children and reports the parent's own size.
+It does not place or draw anything.
+
+Android gives it a `MeasureSpec` for width and another for height.
+Each spec has a size and a rule:
 
 | Mode | Meaning |
 | --- | --- |
 | `EXACTLY` | Use this size |
-| `AT_MOST` | Choose a size no larger than this limit |
+| `AT_MOST` | Use up to this size |
 | `UNSPECIFIED` | No limit for this width or height |
 
-For example, `AT_MOST 200px` means "use up to 200 pixels."
-Short text can be narrower.
-Long text can use several lines.
-
-Call `setMeasuredDimension()` to report the parent's size.
-Use `resolveSizeAndState()` to stay within the parent's limits.
-
-**Measuring gives us a size, not a position.**
-Call a child's `measure()`.
-Do not call its `onMeasure()` directly.
-
-### onLayout: where?
-
-`onLayout()` gives each child a rectangle inside the parent:
+We give the text an `AT_MOST` width.
+We give it an `UNSPECIFIED` height so it can grow:
 
 ```kotlin
-child.layout(24, 40, 124, 140)
-```
-
-The arguments are **left, top, right, bottom**.
-They are not x, y, width, height.
-This box is 100 pixels wide and 100 pixels tall.
-It starts 24 pixels from the parent's left edge.
-It starts 40 pixels from the parent's top edge.
-
-Use the sizes from measurement:
-
-```kotlin
-child.layout(
-    childLeft,
-    childTop,
-    childLeft + child.measuredWidth,
-    childTop + child.measuredHeight
-)
-```
-
-**Layout places the child. It does not draw it.**
-Call a child's `layout()`.
-Do not call its `onLayout()` directly.
-
-### onDraw: what should this View paint?
-
-`onDraw(canvas)` draws custom content for this View.
-For example, it can draw a chart or a line.
-It does not place children.
-
-We do not need it here:
-
-- `TextView` draws its text.
-- `ImageView` draws its image.
-- Android draws the children through `dispatchDraw()`.
-
-The simplified drawing order is:
-
-```text
-background -> parent's own onDraw, if enabled -> children -> foreground
-```
-
-A plain `ViewGroup` normally skips its own drawing.
-Use `setWillNotDraw(false)` if you add custom `onDraw()` code.
-We do not need it in this example.
-
-Use `requestLayout()` when your size or position rules change.
-Use `invalidate()` when only your custom drawing changes.
-These methods ask Android to do work later.
-Android does not have to call all three methods on every frame.
-
-## 5. Keep the XML you already know
-
-You do not have to create every child in Kotlin.
-Keep the image and text in XML.
-Only replace their parent with your own class.
-
-The image example sits inside a `ScrollView`.
-This lets the user scroll if the text is tall.
-Here is part of the XML.
-See the [complete XML](app/src/main/res/layout/image_text_example.xml) for all details.
-
-```xml
-<dev.bayram.viewgrouptutorial.ImageTextView
-    android:id="@+id/image_text"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:padding="@dimen/content_padding">
-
-    <ImageView
-        android:id="@+id/example_image"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:importantForAccessibility="no"
-        android:scaleType="centerInside"
-        android:src="@drawable/example_landscape" />
-
-    <TextView
-        android:id="@+id/example_text"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/summary"
-        android:textSize="18sp" />
-</dev.bayram.viewgrouptutorial.ImageTextView>
-```
-
-XML describes the children and their look.
-Kotlin controls their sizes and positions.
-
-This image is only for decoration.
-So we hide it from screen readers.
-If an image gives useful information, add a `contentDescription`.
-Translate that description like other text.
-
-`centerInside` fits the picture **inside** the image box.
-It does not set the box's size.
-
-Android first creates the parent.
-Then it creates the children from XML.
-This process is called **inflation**.
-
-Find the children after this process ends:
-
-```kotlin
-override fun onFinishInflate() {
-    super.onFinishInflate()
-    image = requireNotNull(findViewById<ImageView>(R.id.example_image))
-    text = requireNotNull(findViewById<TextView>(R.id.example_text))
-}
-```
-
-Here, `image` and `text` are fields in our class.
-The
-[complete class](app/src/main/java/dev/bayram/viewgrouptutorial/ImageTextView.kt)
-also checks the children.
-It requires one image and one text directly inside the parent.
-
-## 6. You need the text width. But how much space can it use?
-
-You are ready to measure the text.
-Should you give it the full row width?
-
-Not yet.
-You still need room for the image and the gap.
-If the text takes the whole row, the other boxes may not fit.
-
-Write the rule as a formula first.
-Use `T` for the measured text width:
-
-```text
-image + gap + text = total row width
-0.5T  + 0.3T + T   = 1.8T
-
-Therefore: text width must be at most available width / 1.8.
-```
-
-Now you have a width limit for the text.
-Measure it within that limit.
-Then use its actual width to calculate the image and gap:
-
-```kotlin
-val availableWidth = (
-    MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-).coerceAtLeast(0)
-
 val textWidthLimit = (availableWidth / 1.8).toInt()
 text.measure(
     MeasureSpec.makeMeasureSpec(textWidthLimit, MeasureSpec.AT_MOST),
     MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
 )
+```
 
+Now `text.measuredWidth` is known.
+We can calculate the image size and gap:
+
+```kotlin
 val imageSide = (text.measuredWidth * 0.5).toInt()
 gap = (text.measuredWidth * 0.3).toInt()
 image.measure(
@@ -353,150 +188,289 @@ image.measure(
 )
 ```
 
-If we have 360 pixels, the text can use up to 200 pixels:
+These are parts of the method.
+The complete class is below.
 
-| Actual measured text width | Image side | Gap | Total row width |
-| --- | --- | --- | --- |
-| 200px | 100px | 60px | 360px |
-| 100px | 50px | 30px | 180px |
+The parent also needs a size:
 
-Short text can use less space.
-The image size depends on the **measured text box**.
-It does not depend on the width of each letter.
-
-These calculations use pixels.
-Android converts values such as `24dp` to pixels.
-We round percentage results down to whole pixels.
-
-The parent needs this size:
-
-```kotlin
-val desiredWidth =
-    paddingLeft + imageSide + gap + text.measuredWidth + paddingRight
-val desiredHeight =
-    paddingTop + maxOf(imageSide, text.measuredHeight) + paddingBottom
+```text
+width  = left padding + image + gap + text + right padding
+height = top padding + taller child + bottom padding
 ```
 
-The full code checks the parent's size limits.
-It also respects its minimum size.
-Then it calls `setMeasuredDimension()`.
-It passes on any child signal that the available size is too small.
+Use `resolveSizeAndState()` to respect the parent's limits.
+Then pass the results to `setMeasuredDimension()`.
+Do not pass `MeasureSpec` values to `setMeasuredDimension()`.
 
-**This sample has limits:**
+All these calculations use pixels.
+Android converts XML values such as `24dp` to pixels.
+`toInt()` rounds our positive percentage results down to whole pixels.
 
-- The parent must receive a width limit.
-- The height must have no limit. The `ScrollView` allows this.
-- Both children must be visible.
-- Child margins are not supported.
+## 6. Place the children in onLayout
 
-The class reports an error if the measurement rules are not supported.
+Now we know both sizes.
+We still need positions.
+That is the job of `onLayout()`.
 
-What if your screen has a fixed height?
-Choose what happens when the content is too tall.
-You could allow scrolling, cut the text, shrink the image, or change the layout.
-
-## 7. The sizes are known. Now place the boxes.
-
-The text has a size.
-The image has a size.
-The gap has a size too.
-
-There is no formula left to guess.
 Place the image at the left padding.
-Place the text after the image and the gap.
-
-Use the taller child as the row height.
-Center both children in that height:
+Place the text after the image and gap:
 
 ```kotlin
-override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-    val rowHeight = maxOf(image.measuredHeight, text.measuredHeight)
-    val imageLeft = paddingLeft
-    val imageTop = paddingTop + (rowHeight - image.measuredHeight) / 2
-    image.layout(
-        imageLeft,
-        imageTop,
-        imageLeft + image.measuredWidth,
-        imageTop + image.measuredHeight
-    )
+val imageLeft = paddingLeft
+val textLeft = imageLeft + image.measuredWidth + gap
+```
 
-    val textLeft = image.right + gap
-    val textTop = paddingTop + (rowHeight - text.measuredHeight) / 2
-    text.layout(
-        textLeft,
-        textTop,
-        textLeft + text.measuredWidth,
-        textTop + text.measuredHeight
-    )
+Use the taller child as the row height.
+Center each child inside that height:
+
+```kotlin
+val rowHeight = maxOf(image.measuredHeight, text.measuredHeight)
+val imageTop = paddingTop + (rowHeight - image.measuredHeight) / 2
+val textTop = paddingTop + (rowHeight - text.measuredHeight) / 2
+```
+
+Then call each child's `layout()`:
+
+```kotlin
+image.layout(
+    imageLeft,
+    imageTop,
+    imageLeft + image.measuredWidth,
+    imageTop + image.measuredHeight
+)
+```
+
+The arguments are **left, top, right, bottom**.
+They are not x, y, width, height.
+The positions are inside the parent, not the screen.
+
+For example, `layout(24, 40, 124, 140)` places a 100 by 100 pixel box.
+Its top-left corner is at x=24 and y=40.
+
+### Do we need onDraw?
+
+No. `onDraw()` is for a View's own custom drawing.
+For example, a chart could draw lines there.
+It does not measure or place children.
+
+Our `TextView` draws its text.
+Our `ImageView` draws its image.
+Android draws children through `dispatchDraw()`.
+So our parent does not need an `onDraw()` override.
+
+![The three jobs: measure sizes, assign rectangles, and draw content.](docs/images/viewgroup-phases.svg)
+
+Use `requestLayout()` when your own size or position rules change.
+Use `invalidate()` when only your custom drawing changes.
+Android does not need to run all three methods on every frame.
+
+## 7. Put it together
+
+This sample expects a width limit and no height limit.
+We place it inside a `ScrollView` to allow vertical growth.
+Both children must stay visible.
+Child margins are not supported.
+
+The image stays physically left, even in right-to-left languages.
+If your design follows reading order, reverse the positions for those languages.
+
+### The XML
+
+Save this as `app/src/main/res/layout/image_text_example.xml`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <dev.bayram.viewgrouptutorial.ImageTextView
+        android:id="@+id/image_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="@dimen/content_padding">
+
+        <ImageView
+            android:id="@+id/example_image"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:importantForAccessibility="no"
+            android:scaleType="centerInside"
+            android:src="@drawable/example_landscape" />
+
+        <TextView
+            android:id="@+id/example_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/summary"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="18sp" />
+    </dev.bayram.viewgrouptutorial.ImageTextView>
+</ScrollView>
+```
+
+The repository includes the referenced text, padding, and image:
+
+- [Text and padding resources](app/src/main/res/values/strings.xml)
+- [Example image](app/src/main/res/drawable/example_landscape.xml)
+
+The image is decorative, so it is hidden from screen readers.
+For a meaningful image, add a translated `contentDescription` instead.
+`centerInside` fits the picture inside the image box.
+It does not set the box's size.
+
+### The complete Kotlin class
+
+Save this as
+`app/src/main/java/dev/bayram/viewgrouptutorial/ImageTextView.kt`.
+It is the same class used by the app and tests.
+
+Android creates the parent before it finishes creating the XML children.
+We find the children in `onFinishInflate()`, after they exist.
+
+```kotlin
+package dev.bayram.viewgrouptutorial
+
+import android.content.Context
+import android.util.AttributeSet
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
+
+/**
+ * Sizes the image and gap from the measured text width, not the parent width.
+ * Expects bounded width and unbounded height, as supplied by the sample ScrollView.
+ * Image-left is physical left, including in RTL; margins and hidden children are not supported.
+ */
+class ImageTextView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : ViewGroup(context, attrs, defStyleAttr) {
+
+    private lateinit var image: ImageView
+    private lateinit var text: TextView
+    private var gap = 0
+
+    override fun onFinishInflate() {
+        super.onFinishInflate()
+        require(childCount == 2) { "ImageTextView requires exactly two children" }
+        image = requireNotNull(findViewById<ImageView>(R.id.example_image))
+        text = requireNotNull(findViewById<TextView>(R.id.example_text))
+        require(image.parent === this && text.parent === this) {
+            "Image and text must be direct children"
+        }
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        require(MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            "ImageTextView requires a bounded width"
+        }
+        require(MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
+            "ImageTextView requires unbounded height; place it inside a ScrollView"
+        }
+        require(image.visibility == VISIBLE && text.visibility == VISIBLE) {
+            "This example requires both children to be visible"
+        }
+        val availableWidth = (
+            MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+        ).coerceAtLeast(0)
+
+        val textWidthLimit = (availableWidth / 1.8).toInt()
+        text.measure(
+            MeasureSpec.makeMeasureSpec(textWidthLimit, MeasureSpec.AT_MOST),
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        )
+
+        val imageSide = (text.measuredWidth * 0.5).toInt()
+        gap = (text.measuredWidth * 0.3).toInt()
+        image.measure(
+            MeasureSpec.makeMeasureSpec(imageSide, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(imageSide, MeasureSpec.EXACTLY)
+        )
+
+        val childState = combineMeasuredStates(text.measuredState, image.measuredState)
+        setMeasuredDimension(
+            resolveSizeAndState(
+                maxOf(
+                    suggestedMinimumWidth,
+                    paddingLeft + imageSide + gap + text.measuredWidth + paddingRight
+                ),
+                widthMeasureSpec,
+                childState
+            ),
+            resolveSizeAndState(
+                maxOf(
+                    suggestedMinimumHeight,
+                    paddingTop + maxOf(imageSide, text.measuredHeight) + paddingBottom
+                ),
+                heightMeasureSpec,
+                childState shl MEASURED_HEIGHT_STATE_SHIFT
+            )
+        )
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        val rowHeight = maxOf(image.measuredHeight, text.measuredHeight)
+        val imageLeft = paddingLeft
+        val imageTop = paddingTop + (rowHeight - image.measuredHeight) / 2
+        image.layout(
+            imageLeft,
+            imageTop,
+            imageLeft + image.measuredWidth,
+            imageTop + image.measuredHeight
+        )
+
+        val textLeft = image.right + gap
+        val textTop = paddingTop + (rowHeight - text.measuredHeight) / 2
+        text.layout(
+            textLeft,
+            textTop,
+            textLeft + text.measuredWidth,
+            textTop + text.measuredHeight
+        )
+    }
 }
 ```
 
-Here, the image stays on the left.
-This is also true for right-to-left languages such as Arabic.
-If the image should follow reading order, reverse the positions for those languages.
+The `require()` checks explain unsupported uses.
+`resolveSizeAndState()` applies size limits and keeps size-warning flags.
+`combineMeasuredStates()` collects those flags from the children.
+The height flags need the `MEASURED_HEIGHT_STATE_SHIFT` shift.
 
-This code leaves real space for the image and gap.
-`translationX` only moves how a View appears.
-It does not change the space measured for the row.
+These details help the class follow Android's measurement rules.
+The main idea is still small: **measure text, calculate image, place both**.
 
-## 8. Try other size and position rules
-
-You can adapt these formulas.
-They are not extra features in the sample:
-
-| Requirement | Rule |
-| --- | --- |
-| Square image follows text height | `imageSide = text.measuredHeight` |
-| Image keeps its aspect ratio | `imageHeight = (imageWidth / aspectRatio).toInt()` |
-| Image uses remaining width | `imageWidth = (availableWidth - text.measuredWidth - gap).coerceAtLeast(0)` |
-| Image starts 30% across text | `imageLeft = text.left + (text.measuredWidth * 0.3).toInt()` |
-| Image overlaps half of text's right edge | `imageLeft = text.right - image.measuredWidth / 2` |
-
-Say where each position starts.
-"30% across the text" is not the same as "left of the text with a 30% gap":
-
-![Two different positioning rules: a gap outside the text versus an offset across the text box.](docs/images/position-relative-to-text.svg)
-
-Calculate the values in the right order:
-
-```text
-available width -> text width limit -> measured text -> image size -> positions
-```
-
-Be careful with rules that depend on each other.
-For example, text width may depend on image width.
-Image width may then depend on text height.
-But text height also depends on text width.
-This creates a circle.
-
-Choose one size limit first, or solve the formula.
-Measuring again and again may not solve the problem.
-
-## 9. Run the examples
+## 8. Run the row you just built
 
 Use Android Studio, JDK 17, and Android SDK 36:
 
 ```sh
 git clone https://github.com/Bayram-MKININI/android-custom-viewgroup-tutorial.git
 cd android-custom-viewgroup-tutorial
-./gradlew :app:assembleDebug
 ```
 
 Set `ANDROID_HOME` to your SDK.
-Or let Android Studio create `local.properties`.
-The first run downloads the tools and libraries it needs.
+Or open the project in Android Studio to create `local.properties`.
+The first build downloads the tools and libraries it needs.
 
-The app first shows the title and summary.
-To see the image example, change the `setContentView()` line in
+The repository also has an earlier title-and-summary demo.
+To show this article's image row, change the `setContentView()` line in
 [MainActivity](app/src/main/java/dev/bayram/viewgrouptutorial/MainActivity.kt):
 
 ```kotlin
 setContentView(R.layout.image_text_example)
 ```
 
-Keep the code that handles system bars.
+Keep the activity's system-bar handling.
 It keeps the content away from those bars.
-Both screens have the same `scroll` ID.
+
+Build the app:
+
+```sh
+./gradlew :app:assembleDebug
+```
 
 With a connected device or emulator running API 24 or newer:
 
@@ -504,40 +478,37 @@ With a connected device or emulator running API 24 or newer:
 ./gradlew :app:installDebug
 ```
 
-Open **Custom ViewGroup Tutorial** on the device.
+Open **Custom ViewGroup Tutorial**.
+Try a short text, then a long text.
+The image and gap should follow the measured text width in both cases.
 
-You can also run the tests and Android lint without a device:
+The included tests check the percentages, positions, and size limits.
+They run without a device:
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 ```
 
-The tests check sizes, positions, percentages, and text updates.
-Also try the app with long text, large fonts, and a narrow window.
-Check it with a screen reader too.
+Also try large fonts, a narrow window, and a screen reader on a device.
 
-## You solved the layout. Did you also make it faster?
+## A short note about performance
 
-It can remove extra layout layers.
-This may reduce work.
-But **fewer layers do not prove that a layout is faster**.
-`ConstraintLayout` can also remove the need for nested layouts.
+Nested layouts can add measurement and placement work.
+A size change can affect parents and other children.
+But Android does not always measure the whole tree again.
 
-This project does not compare performance.
-To compare speed, build the same screen both ways.
-Use the same content and devices.
-Measure the first display and later updates.
-Macrobenchmark and Perfetto can help.
+A custom parent may remove extra layers.
+That does not prove it is faster.
+This project has no performance comparison.
+Measure the same screen both ways before claiming a speedup.
 
-Use a standard layout when it fits the design.
-Use a custom `ViewGroup` when it makes the rules clearer.
-Remember that you must maintain those rules yourself.
+Use a standard layout when it fits.
+Use a custom `ViewGroup` when it makes a special rule clearer.
 
-## Source and references
+## References
 
-- [Simple text layout](app/src/main/java/dev/bayram/viewgrouptutorial/HeadlineView.kt)
-- [Image/text layout](app/src/main/java/dev/bayram/viewgrouptutorial/ImageTextView.kt)
-- [Tests](app/src/test/java/dev/bayram/viewgrouptutorial)
+- [Image/text source](app/src/main/java/dev/bayram/viewgrouptutorial/ImageTextView.kt)
+- [Image/text tests](app/src/test/java/dev/bayram/viewgrouptutorial/ImageTextViewTest.kt)
 - [Custom Android components](https://developer.android.com/develop/ui/views/layout/custom-views/custom-components)
 - [MeasureSpec](https://developer.android.com/reference/android/view/View.MeasureSpec)
 - [Macrobenchmark](https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview)
